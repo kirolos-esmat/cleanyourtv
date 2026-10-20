@@ -21,6 +21,4 @@ com.google.android.videos
 com.google.android.play.games
 com.android.printspooler
 
-# Google TV setup wizard and stock launcher
-com.google.android.tungsten.setupwraith
-com.google.android.apps.tv.launcherx
+
