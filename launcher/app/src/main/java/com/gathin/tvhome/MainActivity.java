@@ -494,6 +494,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         btnInputs.setOnClickListener(v -> showInputs());
         btnInputs.setOnLongClickListener(v -> {
             Intent liveTv = liveTvIntent();
+            if (liveTv == null) {
+                for (String p : new String[]{"com.mitv.tvhome.mitvplus", "com.nst.iptvsmarterstvbox", "com.nostalgiatv.nostalgia_tv"}) {
+                    Intent i = getPackageManager().getLeanbackLaunchIntentForPackage(p);
+                    if (i == null) i = getPackageManager().getLaunchIntentForPackage(p);
+                    if (i != null) {
+                        liveTv = i;
+                        break;
+                    }
+                }
+            }
             if (liveTv != null) {
                 open(liveTv);
                 return true;
@@ -2088,9 +2098,22 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         return new Intent(standardAction);   // nothing found: let open() show the can't-open toast
     }
 
+    private boolean isTvAppAvailable(String pkg) {
+        if (pkg == null) return false;
+        try {
+            return getPackageManager().getLeanbackLaunchIntentForPackage(pkg) != null
+                    || getPackageManager().getLaunchIntentForPackage(pkg) != null;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     /** Hides the Inputs pill when it would have nothing to list: streaming boxes have no HDMI-in, AV or tuner. */
     private void updateInputsButton() {
-        boolean any = liveTvIntent() != null || !sourcePanelService.isEmpty();
+        boolean any = liveTvIntent() != null || !sourcePanelService.isEmpty()
+                || isTvAppAvailable("com.mitv.tvhome.mitvplus")
+                || isTvAppAvailable("com.nst.iptvsmarterstvbox")
+                || isTvAppAvailable("com.nostalgiatv.nostalgia_tv");
         TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
         if (!any && tim != null) {
             for (TvInputInfo info : tim.getTvInputList()) {
@@ -2297,6 +2320,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             addInputRow(rows, popup, R.drawable.ic_livetv, title, -1, () -> open(liveTvIntent));
         }
 
+        addTvAppRow(rows, popup, "com.mitv.tvhome.mitvplus", "Xiaomi TV+");
         addTvAppRow(rows, popup, "com.nst.iptvsmarterstvbox", "IPTV Smarters Pro");
         addTvAppRow(rows, popup, "com.nostalgiatv.nostalgia_tv", "NostalgiaTV");
         if (rows.getChildCount() == 0) {
