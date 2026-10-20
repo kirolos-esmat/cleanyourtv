@@ -18,8 +18,9 @@ import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** Displays and rotates a theme's local wallpaper images while Home is visible. */
+/** Displays and rotates a theme's local wallpaper images or streamable online wallpapers while Home is visible. */
 final class WallpaperPlayer {
+    private final Context context;
     private final FrameLayout root;
     private final ImageView image;
     private final List<File> files;
@@ -29,13 +30,16 @@ final class WallpaperPlayer {
     private final Random random = new Random();
     private final int width;
     private final int height;
+    private final String onlineChoice;
     private boolean active;
     private boolean closed;
     private boolean loading;
     private String displayed = "";
 
     WallpaperPlayer(Context context, FrameLayout root, Config config) {
+        this.context = context.getApplicationContext();
         this.root = root;
+        this.onlineChoice = config.wallpaperChoice;
         files = new ArrayList<>(config.wallpapers);
         interval = config.wallpaperRotationMinutes * 60_000L;
         preferences = context.getSharedPreferences("wallpaper_rotation", Context.MODE_PRIVATE);
@@ -45,7 +49,8 @@ final class WallpaperPlayer {
         image = new ImageView(context);
         image.setScaleType(ImageView.ScaleType.CENTER_CROP);
         image.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        if (config.wallpaperEnabled && !files.isEmpty()) {
+        boolean isOnline = OnlineWallpaper.isOnlineChoice(onlineChoice);
+        if (config.wallpaperEnabled && (!files.isEmpty() || isOnline)) {
             root.addView(image, 0, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             // No shade layer at all when the theme doesn't dim: a full-screen view is overdraw on 1 GB TVs.
@@ -66,6 +71,19 @@ final class WallpaperPlayer {
      * Only the later changes of a rotation decode in the background.
      */
     private void showFirst() {
+        if (OnlineWallpaper.isOnlineChoice(onlineChoice)) {
+            File cached = OnlineWallpaper.getCacheFile(context);
+            if (cached.exists() && cached.length() > 0) {
+                Bitmap bitmap = decode(cached);
+                if (bitmap != null) {
+                    image.setImageBitmap(bitmap);
+                    displayed = onlineChoice;
+                }
+            }
+            fetchOnlineWallpaper();
+            return;
+        }
+
         String previous = preferences.getString("image", "");
         File first = WallpaperRotation.find(files, previous);
         if (first == null) first = WallpaperRotation.pick(files, previous, random);
@@ -85,6 +103,25 @@ final class WallpaperPlayer {
         }
     }
 
+    private void fetchOnlineWallpaper() {
+        if (!OnlineWallpaper.isOnlineChoice(onlineChoice) || loading || closed) return;
+        loading = true;
+        decoder.execute(() -> {
+            File downloaded = OnlineWallpaper.downloadWallpaper(context, onlineChoice);
+            root.post(() -> {
+                loading = false;
+                if (closed || !active) return;
+                if (downloaded != null && downloaded.exists()) {
+                    Bitmap bmp = decode(downloaded);
+                    if (bmp != null) {
+                        image.setImageBitmap(bmp);
+                        displayed = onlineChoice;
+                    }
+                }
+            });
+        });
+    }
+
     void start() {
         active = true;
         update();
@@ -101,7 +138,12 @@ final class WallpaperPlayer {
     }
 
     void update() {
-        if (!active || closed || loading || files.isEmpty()) return;
+        if (!active || closed || loading) return;
+        if (OnlineWallpaper.isOnlineChoice(onlineChoice)) {
+            fetchOnlineWallpaper();
+            return;
+        }
+        if (files.isEmpty()) return;
         String previous = preferences.getString("image", "");
         File selected = WallpaperRotation.find(files, previous);
         long changed = preferences.getLong("changed", 0);
