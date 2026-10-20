@@ -202,6 +202,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** Key of the tile being carried in reorder mode, or null. */
     private String movingKey;
     private boolean singleTileMove;
+    private boolean okDownSeen;
     /** Tile order when reorder mode started, to save only when something moved. */
     private List<String> orderAtStart;
     private View btnReorder;
@@ -839,7 +840,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     return true;
                 default:
                     if (ok || back) {
-                        if (!down) {
+                        if (ok && down) okDownSeen = true;
+                        if (!down && (back || okDownSeen)) {
+                            okDownSeen = false;
                             if (singleTileMove) {
                                 endReorder();
                             } else {
@@ -857,9 +860,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         int pos = focusedTilePosition();
         if (ok && grid.hasFocus()) {
+            if (down) okDownSeen = true;
             // RecyclerView can briefly report NO_POSITION during a move or rebind. Still consume
             // OK on the grid: falling through would let the focused card open its app in reorder mode.
-            if (!down && pos >= 0) pickUp(pos);
+            if (!down && okDownSeen && pos >= 0) {
+                okDownSeen = false;
+                pickUp(pos);
+            }
             return true;
         }
         return super.dispatchKeyEvent(event);   // arrows navigate; OK on a top-bar pill works as usual
@@ -1143,6 +1150,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private void startMoving(int position) {
         if (!beginReorder()) return;
         singleTileMove = true;
+        okDownSeen = false;
         pickUp(position);
         Toast.makeText(this, getString(R.string.moving_hint, adapter.labelAt(position)), Toast.LENGTH_SHORT).show();
         grid.post(() -> focusTile(position));

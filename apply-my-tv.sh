@@ -19,15 +19,13 @@ adb shell am start-service -a com.google.cast.action.BIND -n com.google.android.
 echo "Setting system network location (approximate city weather for screensaver)..."
 adb shell settings put secure location_mode 3
 
-echo "Enforcing minimal app-level location privacy (no direct app sensor access)..."
+echo "Enforcing screensaver privacy while granting launcher location for weather..."
 adb shell pm revoke --user 0 com.google.android.apps.tv.dreamx android.permission.ACCESS_FINE_LOCATION 2>&1 || true
 adb shell pm revoke --user 0 com.google.android.apps.tv.dreamx android.permission.ACCESS_COARSE_LOCATION 2>&1 || true
 adb shell pm revoke --user 10 com.google.android.apps.tv.dreamx android.permission.ACCESS_FINE_LOCATION 2>&1 || true
 adb shell pm revoke --user 10 com.google.android.apps.tv.dreamx android.permission.ACCESS_COARSE_LOCATION 2>&1 || true
-adb shell pm revoke --user 0 com.gathin.tvhome android.permission.ACCESS_FINE_LOCATION 2>&1 || true
-adb shell pm revoke --user 0 com.gathin.tvhome android.permission.ACCESS_COARSE_LOCATION 2>&1 || true
-adb shell pm revoke --user 10 com.gathin.tvhome android.permission.ACCESS_FINE_LOCATION 2>&1 || true
-adb shell pm revoke --user 10 com.gathin.tvhome android.permission.ACCESS_COARSE_LOCATION 2>&1 || true
+adb shell pm grant com.gathin.tvhome android.permission.ACCESS_FINE_LOCATION 2>&1 || true
+adb shell pm grant com.gathin.tvhome android.permission.ACCESS_COARSE_LOCATION 2>&1 || true
 
 echo "Enabling HomeKeyService accessibility service..."
 adb shell settings put secure enabled_accessibility_services com.gathin.tvhome/.HomeKeyService

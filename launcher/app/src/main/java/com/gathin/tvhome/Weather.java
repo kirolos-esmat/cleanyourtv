@@ -2,8 +2,13 @@ package com.gathin.tvhome;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.location.Address;
+import android.location.Geocoder;
+import android.location.Location;
+import android.location.LocationManager;
+import android.os.Build;
 import android.os.Handler;
-import android.os.Looper;
 import android.util.Log;
 
 import org.json.JSONObject;
@@ -12,15 +17,19 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Current weather for the home header (config.xml show_weather).
- * Place comes from config or is auto-detected via public IP (ipwho.is, falling back to ipapi.co)
- * once a day; weather comes from Open-Meteo every 30 minutes.
- * No API keys or accounts required. Text is cached in SharedPreferences so Home displays the last reading immediately.
+ * Place is auto-detected from Android's location service (Wi-Fi/network provider), falling back to public IP
+ * (ipwho.is / ipapi.co) once a day; weather comes from Open-Meteo every 30 minutes.
+ * Can also be set manually in config.xml or config.json.
+ * Text is cached in SharedPreferences so Home displays the last reading immediately.
  */
 final class Weather {
     private static final String TAG = "TvHome.Weather";
@@ -35,6 +44,7 @@ final class Weather {
     private static final long RETRY_MS = 5 * 60_000L;
 
     private static final ExecutorService IO = Executors.newSingleThreadExecutor();
+    private static final ExecutorService IO_CALLBACKS = Executors.newSingleThreadExecutor();
     private static volatile boolean running;
 
     private Weather() { }
@@ -42,7 +52,7 @@ final class Weather {
     /** Shows the cached text right away if present, then fetches a fresh reading if older than 30 minutes. */
     static void refresh(Context ctx, Config cfg, Handler mainHandler, Listener listener) {
         if (cfg == null || !cfg.showWeather) {
-            Log.d(TAG, "refresh skipped: cfg=" + cfg + " showWeather=" + (cfg != null && cfg.showWeather));
+            Log.d(TAG, "refresh skipped: showWeather is false");
             return;
         }
         Context app = ctx.getApplicationContext();
@@ -64,8 +74,11 @@ final class Weather {
 
         long now = System.currentTimeMillis();
         long lastTime = p.getLong("time", 0);
-        if ((cached != null && now - lastTime < WEATHER_MS) || running) {
-            Log.d(TAG, "refresh not needed yet: now=" + now + " lastTime=" + lastTime + " running=" + running);
+        // If location was previously from IP, try upgrading to device location if available
+        boolean upgrade = !hasConfigCoords && !"device".equals(p.getString("src", "")) && locationOn(app);
+
+        if ((cached != null && now - lastTime < WEATHER_MS && !upgrade) || running) {
+            Log.d(TAG, "refresh not needed yet: running=" + running);
             return;
         }
 
@@ -73,7 +86,7 @@ final class Weather {
         Log.d(TAG, "starting background weather fetch");
         IO.execute(() -> {
             try {
-                String text = fetch(cfg, p);
+                String text = fetch(app, cfg, p);
                 Log.d(TAG, "fetch returned: " + text);
                 if (text != null) {
                     p.edit()
@@ -94,7 +107,7 @@ final class Weather {
         });
     }
 
-    private static String fetch(Config cfg, SharedPreferences p) {
+    private static String fetch(Context ctx, Config cfg, SharedPreferences p) {
         try {
             double lat;
             double lon;
@@ -112,16 +125,17 @@ final class Weather {
             } else {
                 long now = System.currentTimeMillis();
                 boolean staleLoc = now - p.getLong("locTime", 0) > LOCATION_MS || !p.contains("lat");
-                Log.d(TAG, "resolving location: stale=" + staleLoc);
-                if (staleLoc) {
-                    boolean found = locate(p, "https://ipwho.is/") || locate(p, "https://ipapi.co/json/");
-                    Log.d(TAG, "locate result: " + found);
+                boolean upgrade = !"device".equals(p.getString("src", "")) && locationOn(ctx);
+                Log.d(TAG, "resolving location: stale=" + staleLoc + " upgrade=" + upgrade);
+                if (staleLoc || upgrade) {
+                    boolean found = locateDevice(ctx, p);
+                    if (!found && staleLoc) found = locate(p, "https://ipwho.is/") || locate(p, "https://ipapi.co/json/");
                     if (!found && !p.contains("lat")) return null;
                 }
                 lat = Double.longBitsToDouble(p.getLong("lat", 0));
                 lon = Double.longBitsToDouble(p.getLong("lon", 0));
                 city = p.getString("city", "");
-                Log.d(TAG, "resolved coords: lat=" + lat + " lon=" + lon + " city=" + city);
+                Log.d(TAG, "resolved coords: lat=" + lat + " lon=" + lon + " city=" + city + " src=" + p.getString("src", ""));
             }
 
             String unit = "fahrenheit".equalsIgnoreCase(cfg.weatherUnit) ? "fahrenheit" : "celsius";
@@ -147,6 +161,114 @@ final class Weather {
         }
     }
 
+    private static boolean locationOn(Context ctx) {
+        boolean fine = ctx.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+        boolean coarse = ctx.checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+        if (!fine && !coarse) return false;
+        LocationManager lm = ctx.getSystemService(LocationManager.class);
+        return lm != null && (Build.VERSION.SDK_INT < Build.VERSION_CODES.P || lm.isLocationEnabled());
+    }
+
+    @SuppressWarnings("MissingPermission")
+    private static boolean locateDevice(Context ctx, SharedPreferences p) {
+        try {
+            if (!locationOn(ctx)) {
+                Log.d(TAG, "locateDevice skipped: location permissions or service off");
+                return false;
+            }
+            LocationManager lm = ctx.getSystemService(LocationManager.class);
+            if (lm == null) return false;
+            Location loc = null;
+            for (String provider : new String[]{"fused", LocationManager.NETWORK_PROVIDER, LocationManager.PASSIVE_PROVIDER}) {
+                try {
+                    Location last = lm.getLastKnownLocation(provider);
+                    if (last != null) {
+                        loc = last;
+                        break;
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+
+            if (loc == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                CountDownLatch done = new CountDownLatch(1);
+                Location[] got = new Location[1];
+                for (String provider : new String[]{"fused", LocationManager.NETWORK_PROVIDER}) {
+                    try {
+                        lm.getCurrentLocation(provider, null, IO_CALLBACKS, l -> {
+                            if (l != null) got[0] = l;
+                            done.countDown();
+                        });
+                        done.await(4, TimeUnit.SECONDS);
+                        if (got[0] != null) {
+                            loc = got[0];
+                            break;
+                        }
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+
+            if (loc == null) {
+                Log.d(TAG, "locateDevice: no location found from providers");
+                return false;
+            }
+
+            double lat = loc.getLatitude();
+            double lon = loc.getLongitude();
+            String city = "";
+
+            try {
+                if (Geocoder.isPresent()) {
+                    List<Address> list = new Geocoder(ctx, Locale.ENGLISH).getFromLocation(lat, lon, 1);
+                    if (list != null && !list.isEmpty()) {
+                        Address a = list.get(0);
+                        String admin = a.getAdminArea() != null ? a.getAdminArea().replace(" Governorate", "").replace(" governorate", "").trim() : "";
+                        String subAdmin = a.getSubAdminArea() != null ? a.getSubAdminArea() : "";
+                        String locality = a.getLocality() != null ? a.getLocality() : "";
+
+                        if (!admin.isEmpty() && (admin.equalsIgnoreCase("Alexandria") || admin.equalsIgnoreCase("Cairo") || admin.equalsIgnoreCase("Giza"))) {
+                            city = admin;
+                        } else if (!subAdmin.isEmpty() && (subAdmin.equalsIgnoreCase("Alexandria") || subAdmin.equalsIgnoreCase("Cairo") || subAdmin.equalsIgnoreCase("Giza"))) {
+                            city = subAdmin;
+                        } else if (!locality.isEmpty()) {
+                            city = locality;
+                        } else if (!subAdmin.isEmpty()) {
+                            city = subAdmin;
+                        } else if (!admin.isEmpty()) {
+                            city = admin;
+                        }
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+
+            if (city.isEmpty()) {
+                try {
+                    String geoUrl = String.format(Locale.US,
+                            "https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=%.4f&longitude=%.4f&localityLanguage=en",
+                            lat, lon);
+                    JSONObject json = new JSONObject(get(geoUrl));
+                    city = json.optString("city", json.optString("locality", ""));
+                } catch (Exception ignored) {
+                }
+            }
+
+            p.edit()
+                    .putLong("lat", Double.doubleToLongBits(lat))
+                    .putLong("lon", Double.doubleToLongBits(lon))
+                    .putString("city", city)
+                    .putLong("locTime", System.currentTimeMillis())
+                    .putString("src", "device")
+                    .apply();
+            Log.d(TAG, "locateDevice success: lat=" + lat + " lon=" + lon + " city=" + city);
+            return true;
+        } catch (Exception e) {
+            Log.w(TAG, "locateDevice error: " + e);
+            return false;
+        }
+    }
+
     private static boolean locate(SharedPreferences p, String url) {
         try {
             Log.d(TAG, "locate querying " + url);
@@ -164,8 +286,9 @@ final class Weather {
                     .putLong("lon", Double.doubleToLongBits(lon))
                     .putString("city", city)
                     .putLong("locTime", System.currentTimeMillis())
+                    .putString("src", "ip")
                     .apply();
-            Log.d(TAG, "locate success: lat=" + lat + " lon=" + lon + " city=" + city);
+            Log.d(TAG, "locate IP success: lat=" + lat + " lon=" + lon + " city=" + city);
             return true;
         } catch (Exception e) {
             Log.w(TAG, "locate error querying " + url + ": " + e);
@@ -196,7 +319,7 @@ final class Weather {
         if (code == 0) return day ? "\u2600\uFE0F" : "\uD83C\uDF19";                  // ☀️ / 🌙 (sun / moon)
         if (code <= 2) return day ? "\u26C5" : "\u2601\uFE0F";                          // ⛅ / ☁️ (partly cloudy)
         if (code == 3) return "\u2601\uFE0F";                                           // ☁️ (overcast)
-        if (code == 45 || code == 48) return "\u2601\uFE0F";                           // ☁️ (fog: older TV emoji fonts show fog as a box, so cloud is safer)
+        if (code == 45 || code == 48) return "\u2601\uFE0F";                           // ☁️ (fog)
         if (code >= 51 && code <= 57) return "\uD83C\uDF26\uFE0F";                      // 🌦️ (drizzle)
         if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) return "\uD83C\uDF27\uFE0F"; // 🌧️ (rain)
         if ((code >= 71 && code <= 77) || code == 85 || code == 86) return "\u2744\uFE0F";         // ❄️ (snow)
