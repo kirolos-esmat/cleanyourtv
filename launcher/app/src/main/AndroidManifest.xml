@@ -32,6 +32,8 @@
         </intent>
         <!-- China-market MIUI TV firmware: the Settings and Wi-Fi pills fall back to Xiaomi's settings app. -->
         <package android:name="com.xiaomi.mitv.settings" />
+        <package android:name="com.google.android.apps.tv.launcherx" />
+        <package android:name="com.android.systemui" />
     </queries>
 
     <application
@@ -51,7 +53,7 @@
             android:clearTaskOnLaunch="true"
             android:configChanges="orientation|screenSize|keyboard|keyboardHidden|uiMode"
             android:screenOrientation="landscape">
-            <intent-filter>
+            <intent-filter android:priority="2">
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.HOME" />
                 <category android:name="android.intent.category.DEFAULT" />

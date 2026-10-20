@@ -492,6 +492,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         btnInputs = findViewById(R.id.btnInputs);
         View btnSettings = findViewById(R.id.btnSettings);
         btnInputs.setOnClickListener(v -> showInputs());
+        btnInputs.setOnLongClickListener(v -> {
+            Intent liveTv = liveTvIntent();
+            if (liveTv != null) {
+                open(liveTv);
+                return true;
+            }
+            return false;
+        });
         btnWifi.setOnClickListener(v -> openNetworkPill());
         btnWifi.setOnLongClickListener(v -> {
             open(systemIntent(Settings.ACTION_WIFI_SETTINGS));
@@ -619,6 +627,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (showStats) startStats();
         sky.update();
         wallpaperPlayer.start();
+        resetScreensaverTimer();
         handler.postDelayed(minuteTick, MINUTE_MS);
         if (festive && diya != null) {
             diya.start();
@@ -722,6 +731,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         ambient.animate().cancel();
         heroArt.animate().cancel();
         handler.removeCallbacks(minuteTick);
+        handler.removeCallbacks(screensaverRunnable);
         stopStats();
         if (diya != null) diya.stop();
         cancelPendingFocusScroll();
@@ -1042,9 +1052,65 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         });
     }
 
+    private final Runnable screensaverRunnable = this::launchScreensaver;
+
+    private long getScreensaverTimeoutMs() {
+        try {
+            int timeout = Settings.System.getInt(getContentResolver(), Settings.System.SCREEN_OFF_TIMEOUT, 0);
+            if (timeout > 0) return timeout;
+            timeout = Settings.Secure.getInt(getContentResolver(), "screensaver_timeout", 0);
+            if (timeout > 0) return timeout;
+        } catch (Exception ignored) {
+        }
+        return 600_000L; // default 10 minutes
+    }
+
+    private void resetScreensaverTimer() {
+        handler.removeCallbacks(screensaverRunnable);
+        long timeoutMs = getScreensaverTimeoutMs();
+        if (timeoutMs > 0) {
+            handler.postDelayed(screensaverRunnable, timeoutMs);
+        }
+    }
+
+    private void launchScreensaver() {
+        if (!hasWindowFocus() || isFinishing()) return;
+        if (reordering || dockEditing) return;
+        Intent dream = new Intent(Intent.ACTION_MAIN)
+                .setClassName("com.android.systemui", "com.android.systemui.Somnambulator")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            startActivity(dream);
+        } catch (Exception e) {
+            try {
+                startActivity(new Intent(Intent.ACTION_DREAMING_STARTED).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    @Override
+    public void onUserInteraction() {
+        super.onUserInteraction();
+        resetScreensaverTimer();
+    }
+
     @Override
     public void onBackPressed() {
-        // Home screen: Back goes nowhere.
+        if (reordering) {
+            endReorder();
+            return;
+        }
+        View current = getCurrentFocus();
+        if (current != null && (current == btnInputs || current == btnWifi || current == findViewById(R.id.btnSettings) || current == btnReorder)) {
+            focusTile(0);
+            return;
+        }
+        if (lastFocused >= COLUMNS) {
+            focusTile(0);
+            return;
+        }
+        launchScreensaver();
     }
 
     // ---- glass highlight -------------------------------------------------------------------------
@@ -2222,8 +2288,17 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (liveTv != null) {
             if (rows.getChildCount() > 0) addSeparator(rows);
             final Intent liveTvIntent = liveTv;
-            addInputRow(rows, popup, R.drawable.ic_livetv, getString(R.string.live_tv), -1, () -> open(liveTvIntent));
+            CharSequence appLabel = null;
+            try {
+                appLabel = getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(liveTvPkg, 0));
+            } catch (Exception ignored) {
+            }
+            String title = (appLabel != null && appLabel.length() > 0) ? appLabel.toString() : getString(R.string.live_tv);
+            addInputRow(rows, popup, R.drawable.ic_livetv, title, -1, () -> open(liveTvIntent));
         }
+
+        addTvAppRow(rows, popup, "com.nst.iptvsmarterstvbox", "IPTV Smarters Pro");
+        addTvAppRow(rows, popup, "com.nostalgiatv.nostalgia_tv", "NostalgiaTV");
         if (rows.getChildCount() == 0) {
             Toast.makeText(this, R.string.no_inputs, Toast.LENGTH_SHORT).show();
             return;
@@ -2294,6 +2369,25 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             action.run();
         });
         rows.addView(row);
+    }
+
+    private void addTvAppRow(LinearLayout rows, PopupWindow popup, String pkg, String fallbackTitle) {
+        if (pkg == null || pkg.equals(liveTvPkg)) return;
+        Intent intent = getPackageManager().getLeanbackLaunchIntentForPackage(pkg);
+        if (intent == null) {
+            intent = getPackageManager().getLaunchIntentForPackage(pkg);
+        }
+        if (intent == null) return;
+        String title = fallbackTitle;
+        try {
+            CharSequence label = getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(pkg, 0));
+            if (label != null && label.length() > 0) {
+                title = label.toString();
+            }
+        } catch (Exception ignored) {
+        }
+        final Intent launchIntent = intent;
+        addInputRow(rows, popup, R.drawable.ic_livetv, title, -1, () -> open(launchIntent));
     }
 
     // ---- launcher settings and module cards -------------------------------------------------------
