@@ -126,9 +126,9 @@
          weather from Open-Meteo every 30 minutes. Needs internet; false makes the launcher send no requests.
          Can also be set in config.json. -->
     <bool name="show_weather">true</bool>
-    <string name="weather_latitude" translatable="false"></string>
-    <string name="weather_longitude" translatable="false"></string>
-    <string name="weather_place" translatable="false"></string>
+    <string name="weather_latitude" translatable="false">31.2156</string>
+    <string name="weather_longitude" translatable="false">29.9553</string>
+    <string name="weather_place" translatable="false">Alexandria</string>
     <string name="weather_unit" translatable="false">celsius</string>
 
     <!-- A name after the greeting: "Mr. Trịnh" shows GOOD MORNING, MR. TRỊNH. Empty: the greeting alone. -->

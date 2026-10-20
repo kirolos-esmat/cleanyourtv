@@ -47,6 +47,15 @@ final class Weather {
         }
         Context app = ctx.getApplicationContext();
         SharedPreferences p = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+
+        boolean hasConfigCoords = cfg.weatherLatitude != null && !cfg.weatherLatitude.isEmpty()
+                && cfg.weatherLongitude != null && !cfg.weatherLongitude.isEmpty();
+        boolean placeMismatch = hasConfigCoords && (!cfg.weatherPlace.trim().equals(p.getString("city", ""))
+                || !cfg.weatherLatitude.trim().equals(p.getString("cfg_lat", "")));
+        if (placeMismatch) {
+            p.edit().remove("text").remove("time").putString("cfg_lat", cfg.weatherLatitude.trim()).apply();
+        }
+
         String cached = p.getString("text", null);
         if (cached != null) {
             Log.d(TAG, "using cached weather: " + cached);
@@ -98,6 +107,7 @@ final class Weather {
                 lat = Double.parseDouble(cfg.weatherLatitude);
                 lon = Double.parseDouble(cfg.weatherLongitude);
                 city = cfg.weatherPlace != null ? cfg.weatherPlace.trim() : "";
+                p.edit().putString("city", city).putString("cfg_lat", cfg.weatherLatitude.trim()).apply();
                 Log.d(TAG, "using config coords: lat=" + lat + " lon=" + lon + " city=" + city);
             } else {
                 long now = System.currentTimeMillis();
