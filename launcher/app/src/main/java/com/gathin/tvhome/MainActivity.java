@@ -1019,6 +1019,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             } else {
                 Toast.makeText(this, R.string.reorder_not_saved, Toast.LENGTH_SHORT).show();
             }
+            adapter.saveOrder();
         }
         if (fillDockLeavesSlots) reloadTiles();   // the empty dock slots left out while reordering come back
     }
