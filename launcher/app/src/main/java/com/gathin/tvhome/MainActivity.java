@@ -333,7 +333,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         heroDots = findViewById(R.id.heroDots);
         heroArt = findViewById(R.id.heroArt);
         cinematic = cfg.cinematicHome;
-        if (cinematic) setUpCinematicShelf();
+        setUpHeroShelf();
         // dock_title false: the name above the dock (and the cinematic lines under it) never shows; the glow
         // still follows the dock.
         if (!cfg.dockTitle) hero.setVisibility(View.GONE);
@@ -1272,8 +1272,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         glassTargetX = x;
         glassTargetY = y;
         // Cinematic shelf: the highlight glows in the dock app's colour, plain white in the grid.
-        int accent = cinematic && !festive && position < COLUMNS ? adapter.ambientColorAt(position) : 0;
-        if (cinematic && !festive && accent != glassAccent) {
+        int accent = cinematic && !festive && position < COLUMNS ? adapter.ambientColorAt(position) : (festive ? festival.accentColor() : 0);
+        if (accent != glassAccent) {
             glassAccent = accent;
             glass.setAccent(accent);
         }
@@ -1395,28 +1395,34 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
     }
 
-    /** The shelf's text for this dock app: its name and, on the cinematic shelf, "Last opened" and the dots. */
+    /** The shelf's text for this dock app: its name, "Last opened" line, and dock position dots. */
     private void fillHero(int position, String label) {
         heroName.setText(label);
-        if (!cinematic) return;
         updateHeroMeta(position);
         updateHeroDots(position);
     }
 
-    // ---- cinematic shelf -------------------------------------------------------------------------
+    // ---- hero shelf (typography & metadata) --------------------------------------------------------
 
-    /** The parts that never change: a larger name, the meta line and the dots, the artwork and the scrim. */
-    private void setUpCinematicShelf() {
+    /** The parts that never change: large typography, the meta line and the dots. */
+    private void setUpHeroShelf() {
         heroName.setTextSize(TypedValue.COMPLEX_UNIT_SP, 68f);
         heroName.setLetterSpacing(-0.025f);
         heroMeta.setVisibility(View.INVISIBLE);   // keeps its height, so the name does not jump when it fills in
         heroDots.setVisibility(View.VISIBLE);
-        heroArt.setVisibility(View.VISIBLE);
-        // One stretched bitmap: apply its alpha while drawing instead of through an offscreen buffer.
-        heroArt.forceHasOverlappingRendering(false);
-        View scrim = findViewById(R.id.heroScrim);
-        scrim.setBackground(scrimDrawable());
-        scrim.setVisibility(View.VISIBLE);
+        if (cinematic) {
+            heroArt.setVisibility(View.VISIBLE);
+            heroArt.forceHasOverlappingRendering(false);
+            View scrim = findViewById(R.id.heroScrim);
+            if (scrim != null) {
+                scrim.setBackground(scrimDrawable());
+                scrim.setVisibility(View.VISIBLE);
+            }
+        } else {
+            heroArt.setVisibility(View.GONE);
+            View scrim = findViewById(R.id.heroScrim);
+            if (scrim != null) scrim.setVisibility(View.GONE);
+        }
     }
 
     /**
