@@ -1,5 +1,5 @@
 # Xiaomi Mi Box S 2nd gen (MiTV-AFKR0, jaws) customized debloat list
-# Kept enabled per user choice: com.xiaomi.mitv.updateservice, com.mitv.tvhome.mitvplus (Xiaomi TV+)
+# Kept enabled per user choice: com.xiaomi.mitv.updateservice, com.mitv.tvhome.mitvplus (Xiaomi TV+), com.google.android.apps.mediashell (Google Cast & Screensaver Weather)
 
 # Telemetry and attribution
 com.miui.tv.analytics
@@ -16,7 +16,6 @@ android.autoinstalls.config.xioami.mibox3
 
 # Preloaded apps
 com.google.android.tv
-com.google.android.apps.mediashell
 com.amazon.amazonvideo.livingroom
 com.google.android.videos
 com.google.android.play.games
