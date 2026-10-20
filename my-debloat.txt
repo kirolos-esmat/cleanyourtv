@@ -16,6 +16,7 @@ android.autoinstalls.config.xioami.mibox3
 
 # Preloaded apps
 com.google.android.tv
+com.google.android.apps.mediashell
 com.amazon.amazonvideo.livingroom
 com.google.android.videos
 com.google.android.play.games
