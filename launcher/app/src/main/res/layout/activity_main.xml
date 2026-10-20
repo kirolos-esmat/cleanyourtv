@@ -223,6 +223,7 @@
                         android:textAllCaps="true" />
 
                     <View
+                        android:id="@+id/clockDivider"
                         android:layout_width="1dp"
                         android:layout_height="26dp"
                         android:layout_gravity="bottom"
@@ -245,6 +246,22 @@
                             android:gravity="left"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:textColor="#E6FFFFFF"
+                            android:textSize="17sp"
+                            android:fontFamily="@font/outfit_regular"
+                            android:letterSpacing="0.02"
+                            android:includeFontPadding="false"
+                            android:visibility="gone" />
+
+                        <!-- Weather ("⛅ 23° · Casablanca"), shown when show_weather is on. -->
+                        <TextView
+                            android:id="@+id/weather"
+                            android:gravity="left"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="4dp"
                             android:singleLine="true"
                             android:ellipsize="end"
                             android:textColor="#E6FFFFFF"

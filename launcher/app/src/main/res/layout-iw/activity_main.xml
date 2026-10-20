@@ -201,23 +201,40 @@
                         android:includeFontPadding="false"
                         android:visibility="gone" />
 
-                    <TextClock
-                        android:id="@+id/date"
-                        android:gravity="right"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:singleLine="true"
-                        android:ellipsize="end"
-                        android:format12Hour="@string/date_format"
-                        android:format24Hour="@string/date_format"
-                        android:textColor="#A6FFFFFF"
-                        android:textSize="14sp"
-                        android:fontFamily="@font/outfit_regular"
-                        android:letterSpacing="0.14"
-                        android:textAllCaps="true" />
+                        <!-- Weather, shown when show_weather is on. -->
+                        <TextView
+                            android:id="@+id/weather"
+                            android:gravity="right"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="4dp"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:textColor="#E6FFFFFF"
+                            android:textSize="17sp"
+                            android:fontFamily="@font/outfit_regular"
+                            android:letterSpacing="0.02"
+                            android:includeFontPadding="false"
+                            android:visibility="gone" />
+
+                        <TextClock
+                            android:id="@+id/date"
+                            android:gravity="right"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:singleLine="true"
+                            android:ellipsize="end"
+                            android:format12Hour="@string/date_format"
+                            android:format24Hour="@string/date_format"
+                            android:textColor="#A6FFFFFF"
+                            android:textSize="14sp"
+                            android:fontFamily="@font/outfit_regular"
+                            android:letterSpacing="0.14"
+                            android:textAllCaps="true" />
                 </LinearLayout>
 
                 <View
+                    android:id="@+id/clockDivider"
                     android:layout_width="1dp"
                     android:layout_height="26dp"
                     android:layout_gravity="bottom"

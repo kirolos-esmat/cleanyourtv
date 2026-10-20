@@ -107,4 +107,7 @@
     <!-- Cinematic top shelf (cinematic_home): the line under the focused dock app's name; %1$s is when it was
          last opened, e.g. "5 minutes ago" or "yesterday, 9:40 pm". -->
     <string name="last_opened">Last opened %1$s</string>
+    <string name="move_app">Move</string>
+    <string name="app_info">App info</string>
+    <string name="moving_hint">Moving %1$s \u00B7 Press OK when done</string>
 </resources>

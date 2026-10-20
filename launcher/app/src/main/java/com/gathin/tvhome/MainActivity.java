@@ -139,6 +139,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private TextView btnWifi;
     private TextView shamsiDate;
     private TextView stats;
+    private TextView weather;
+    private Config config;
     private List<RaceWeekend.Race> raceCalendar;
     private View racePanel;
     private TextView raceKicker, raceHeadline, raceSessions;
@@ -199,6 +201,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean reordering;
     /** Key of the tile being carried in reorder mode, or null. */
     private String movingKey;
+    private boolean singleTileMove;
     /** Tile order when reorder mode started, to save only when something moved. */
     private List<String> orderAtStart;
     private View btnReorder;
@@ -274,6 +277,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         @Override
         public void run() {
             updateGreeting();
+            updateWeather();
             updateRace();
             updateWifiLabel();
             sky.update();
@@ -337,6 +341,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         greetingColor = greeting.getCurrentTextColor();
         btnWifi = findViewById(R.id.btnWifi);
         shamsiDate = findViewById(R.id.shamsiDate);
+        weather = findViewById(R.id.weather);
+        this.config = cfg;
         stats = findViewById(R.id.stats);
         raceCalendar = cfg.raceCalendar;
         racePanel = findViewById(R.id.racePanel);
@@ -631,6 +637,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         rebuildOnResume = false;
         updateGreeting();
+        updateWeather();
         updateRace();
         updateWifiLabel();
         updateInputsButton();
@@ -832,7 +839,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     return true;
                 default:
                     if (ok || back) {
-                        if (!down) drop();
+                        if (!down) {
+                            if (singleTileMove) {
+                                endReorder();
+                            } else {
+                                drop();
+                            }
+                        }
                         return true;
                     }
                     return super.dispatchKeyEvent(event);
@@ -985,6 +998,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         dockEditSlot = -1;
         drop();
         reordering = false;
+        singleTileMove = false;
         adapter.setReordering(false);
         glass.setAccent(festive ? festival.accentColor() : 0);
         btnReorder.setActivated(false);
@@ -1060,6 +1074,78 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 dimOthers();   // views that came into view or were rebound during the move
             }
         });
+    }
+
+    @Override
+    public boolean onTileClicked(int position, AppAdapter.Entry entry) {
+        if (reordering || movingKey != null) {
+            endReorder();
+            return true;
+        }
+        return false;
+    }
+
+    @Override
+    public void onTileLongPressed(int position, View card, AppAdapter.Entry entry) {
+        if (reordering || movingKey != null) {
+            endReorder();
+            return;
+        }
+        if (openPopup != null) {
+            openPopup.dismiss();
+            openPopup = null;
+        }
+        View panel = getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
+        LinearLayout rows = panel.findViewById(R.id.rows);
+        int width = (int) (180 * density);
+        final PopupWindow popup = glassPopup(panel, width);
+        openPopup = popup;
+
+        addInputRow(rows, popup, R.drawable.ic_move, getString(R.string.move_app), -1, () -> startMoving(position));
+        addSeparator(rows);
+        addInputRow(rows, popup, R.drawable.ic_settings, getString(R.string.app_info), -1, () -> {
+            Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + entry.pkg));
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            try {
+                startActivity(i);
+            } catch (ActivityNotFoundException ignored) {
+            }
+        });
+
+        popup.setOnDismissListener(() -> {
+            if (openPopup == popup) openPopup = null;
+            if (!reordering && movingKey == null) {
+                grid.post(() -> focusTile(lastFocused));
+            }
+        });
+
+        panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+        int pWidth = Math.max(width, panel.getMeasuredWidth());
+        popup.setWidth(pWidth);
+        int pHeight = panel.getMeasuredHeight();
+
+        Rect r = new Rect(0, 0, card.getWidth(), card.getHeight());
+        root.offsetDescendantRectToMyCoords(card, r);
+        int gap = (int) (10 * density);
+        boolean openAbove = (r.bottom + gap + pHeight) > (root.getHeight() - (int) (16 * density));
+        int yOff = openAbove ? -(card.getHeight() + pHeight + gap) : gap;
+
+        panel.setAlpha(0f);
+        panel.setPivotY(openAbove ? pHeight : 0f);
+        panel.setScaleY(0.92f);
+        panel.setTranslationY(openAbove ? 8 * density : -8 * density);
+        popup.showAsDropDown(card, 0, yOff, Gravity.START);
+        panel.animate().alpha(1f).scaleY(1f).translationY(0f).setDuration(220)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f)).start();
+        rows.getChildAt(0).requestFocus();
+    }
+
+    private void startMoving(int position) {
+        if (!beginReorder()) return;
+        singleTileMove = true;
+        pickUp(position);
+        Toast.makeText(this, getString(R.string.moving_hint, adapter.labelAt(position)), Toast.LENGTH_SHORT).show();
+        grid.post(() -> focusTile(position));
     }
 
     private final Runnable screensaverRunnable = this::launchScreensaver;
@@ -1892,6 +1978,22 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             greeting.setTextColor(greetingColor);
         }
         if (shamsi) shamsiDate.setText(Shamsi.today());
+    }
+
+    /** Weather line above the date; the cached reading shows at once, a fresh one every 30 minutes. */
+    private void updateWeather() {
+        if (weather == null || config == null || !config.showWeather) return;
+        Weather.refresh(this, config, handler, text -> {
+            if (isDestroyed()) return;
+            weather.setText(text);
+            weather.setVisibility(View.VISIBLE);
+            View divider = findViewById(R.id.clockDivider);
+            if (divider != null) {
+                ViewGroup.LayoutParams lp = divider.getLayoutParams();
+                lp.height = (int) (38 * density);
+                divider.setLayoutParams(lp);
+            }
+        });
     }
 
     // ---- race-weekend panel (a theme's race_calendar) -----------------------------------------------

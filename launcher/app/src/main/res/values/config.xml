@@ -122,6 +122,15 @@
          Gregorian date. -->
     <bool name="shamsi_date">false</bool>
 
+    <!-- Weather above the date: place from config or public IP once a day (ipwho.is / ipapi.co),
+         weather from Open-Meteo every 30 minutes. Needs internet; false makes the launcher send no requests.
+         Can also be set in config.json. -->
+    <bool name="show_weather">true</bool>
+    <string name="weather_latitude" translatable="false"></string>
+    <string name="weather_longitude" translatable="false"></string>
+    <string name="weather_place" translatable="false"></string>
+    <string name="weather_unit" translatable="false">celsius</string>
+
     <!-- A name after the greeting: "Mr. Trịnh" shows GOOD MORNING, MR. TRỊNH. Empty: the greeting alone. -->
     <string name="greeting_name" translatable="false"></string>
     <!-- Optional VPN app the network pill opens (hold the pill for Wi-Fi settings), e.g. the package of the
