@@ -23,6 +23,43 @@
 > [@gathint, 17 October 2026](https://x.com/gathint/status/2111379569030939102). The replies are where
 > most of the TV lists here came from. The repo was called tv-vibehack until the 19th; old links work.
 
+## ✨ Features in this Fork
+
+This fork introduces key features, performance optimizations, and remote-friendly utilities built for everyday TV use:
+
+### 1. Live Weather & Dynamic Top Bar
+<p align="center">
+  <img src="docs/custom-home.jpg" alt="Clean Home Screen with Live Weather" width="850">
+</p>
+
+* **Real-Time Weather Widget:** Powered by [Open-Meteo](https://open-meteo.com) above the date, displaying current conditions, temperature, and auto-detected city location with network provider fallback and intelligent caching.
+* **Top-Bar Control Hub:** Modern pill-shaped navigation with instant access to Inputs, Control Center, and Settings.
+* **Dynamic Wallpapers & 32-Bit True Color:** Background rotation supporting online feeds (Reddit RSS / Unsplash), full 32-bit true color rendering (no color banding), and 5-minute automated shuffle intervals.
+
+### 2. Quick Control Center
+<p align="center">
+  <img src="docs/custom-control-center.jpg" alt="Quick Control Center" width="850">
+</p>
+
+* **One-Click TV Controls:** Accessible directly from the top-bar header icon next to Settings.
+* **Instant Standby:** Put the TV into sleep mode cleanly without digging through system menus.
+* **Free Up Memory (RAM Cleaner):** Real-time free memory reporting with one-tap background process pruning.
+* **Storage Cleaner:** Live internal storage monitoring and quick cleaner access.
+* **Sound Output Switcher:** Instant shortcut to Audio and Bluetooth device settings.
+* **Wallpaper Shuffle:** Rotate to the next high-resolution scene on demand.
+
+### 3. Interactive Remote Tile Management & Integrated Keys
+<p align="center">
+  <img src="docs/custom-tile-reorder.jpg" width="49%" alt="Tile Context Menu" />
+  <img src="docs/custom-quick-settings.jpg" width="49%" alt="Google TV Quick Settings" />
+</p>
+
+* **Remote-Friendly Tile Reordering:** Long-press `OK` on any dock or grid tile to open the visual menu and reposition apps directly using your remote.
+* **Native Key Handling (`HomeKeyService`):** Integrated accessibility service replacing third-party button mappers. Long-press or double-tap Home directly summons the native Google TV Quick Settings overlay.
+* **Smart Inputs Support:** Preserves inputs shortcuts for custom TV and streaming applications like IPTV Smarters Pro, NostalgiaTV, and Xiaomi TV+.
+
+---
+
 ## How it works
 
 Android TVs have the same debug bridge as Android phones. Switch on USB debugging in the TV's
