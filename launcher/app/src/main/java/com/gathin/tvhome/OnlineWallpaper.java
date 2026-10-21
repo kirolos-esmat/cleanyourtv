@@ -170,7 +170,7 @@ final class OnlineWallpaper {
             String cachedChoice = ctx.getSharedPreferences("tvhome_online_wp", Context.MODE_PRIVATE)
                     .getString("cached_choice", "");
             if (choice != null && choice.equals(cachedChoice)) {
-                if (isStatic) {
+                if (isStatic || CHOICE_REDDIT.equals(choice)) {
                     return target;
                 } else if (isBing) {
                     long lastModified = target.lastModified();

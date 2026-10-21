@@ -85,12 +85,15 @@ final class WallpaperPlayer {
      */
     private void showFirst() {
         if (OnlineWallpaper.isOnlineChoice(onlineChoice)) {
+            String cachedChoice = context.getSharedPreferences("tvhome_online_wp", Context.MODE_PRIVATE)
+                    .getString("cached_choice", "");
             File cached = OnlineWallpaper.getCacheFile(context);
-            if (cached.exists() && cached.length() > 0) {
+            if (onlineChoice.equals(cachedChoice) && cached.exists() && cached.length() > 0) {
                 Bitmap bitmap = decode(cached);
                 if (bitmap != null) {
                     image.setImageBitmap(bitmap);
                     displayed = onlineChoice;
+                    return;
                 }
             }
             fetchOnlineWallpaper();
@@ -165,6 +168,8 @@ final class WallpaperPlayer {
 
     void shuffle() {
         if (closed || loading) return;
+        long now = System.currentTimeMillis();
+        preferences.edit().putLong("changed", now).apply();
         if (OnlineWallpaper.isOnlineChoice(onlineChoice) || files.isEmpty()) {
             loading = true;
             decoder.execute(() -> {
@@ -178,6 +183,7 @@ final class WallpaperPlayer {
                         if (bmp != null) {
                             applyBitmapWithCrossfade(bmp);
                             displayed = choice;
+                            preferences.edit().putLong("changed", System.currentTimeMillis()).apply();
                         }
                     }
                 });
@@ -228,15 +234,36 @@ final class WallpaperPlayer {
 
     void update() {
         if (!active || closed || loading) return;
+        long now = System.currentTimeMillis();
+        long changed = preferences.getLong("changed", 0);
+
         if (OnlineWallpaper.isOnlineChoice(onlineChoice)) {
-            fetchOnlineWallpaper();
+            // Auto-rotate only when interval is enabled (> 0) and due!
+            if (interval > 0 && WallpaperRotation.due(changed, now, interval)) {
+                loading = true;
+                decoder.execute(() -> {
+                    File downloaded = OnlineWallpaper.downloadWallpaper(context, onlineChoice, true);
+                    root.post(() -> {
+                        loading = false;
+                        if (closed || !active) return;
+                        if (downloaded != null && downloaded.exists()) {
+                            Bitmap bmp = decode(downloaded);
+                            if (bmp != null) {
+                                applyBitmapWithCrossfade(bmp);
+                                displayed = onlineChoice;
+                                preferences.edit().putLong("changed", System.currentTimeMillis()).apply();
+                            }
+                        }
+                    });
+                });
+            }
             return;
         }
+
         if (files.isEmpty()) return;
         String previous = preferences.getString("image", "");
         File selected = WallpaperRotation.find(files, previous);
-        long changed = preferences.getLong("changed", 0);
-        if (selected == null || WallpaperRotation.due(changed, System.currentTimeMillis(), interval)) {
+        if (selected == null || WallpaperRotation.due(changed, now, interval)) {
             selected = WallpaperRotation.pick(files, previous, order, random);
         }
         if (selected == null || selected.getName().equals(displayed)) return;
@@ -258,10 +285,8 @@ final class WallpaperPlayer {
                 }
                 applyBitmapWithCrossfade(bitmap);
                 displayed = next.getName();
-                if (!displayed.equals(previous) || changed == 0) {
-                    preferences.edit().putString("image", displayed)
-                            .putLong("changed", System.currentTimeMillis()).apply();
-                }
+                preferences.edit().putString("image", displayed)
+                        .putLong("changed", System.currentTimeMillis()).apply();
             });
         });
     }
