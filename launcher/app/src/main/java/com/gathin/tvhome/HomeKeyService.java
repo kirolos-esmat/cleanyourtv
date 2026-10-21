@@ -3,13 +3,18 @@ package com.gathin.tvhome;
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.content.Intent;
+import android.graphics.Rect;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
 import android.view.KeyEvent;
+import android.view.View;
 import android.view.accessibility.AccessibilityEvent;
+import android.view.accessibility.AccessibilityNodeInfo;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -68,14 +73,33 @@ public class HomeKeyService extends AccessibilityService {
 
     private String foregroundPackage = "";
 
+    private static boolean isAllowedLauncherxActivity(String className) {
+        if (className == null) return false;
+        return className.contains("Dashboard")
+                || className.contains("Profile")
+                || className.contains("Account")
+                || className.contains("Reauth")
+                || className.contains("Lock");
+    }
+
+    private final Runnable redirectHomeRunnable = () -> {
+        if ("com.google.android.apps.tv.launcherx".equals(foregroundPackage)) {
+            openHome();
+        }
+    };
+
+    private int lastHandledNavKey = 0;
+
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
         instance = this;
         AccessibilityServiceInfo info = getServiceInfo();
         if (info != null) {
-            info.flags |= AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS;
-            info.eventTypes |= AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED;
+            info.flags |= AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS
+                    | AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;
+            info.eventTypes |= AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+                    | AccessibilityEvent.TYPE_WINDOWS_CHANGED;
             setServiceInfo(info);
         }
         settingsScancodes = getResources().getIntArray(R.array.settings_key_scancodes);
@@ -89,6 +113,7 @@ public class HomeKeyService extends AccessibilityService {
 
     @Override
     public boolean onUnbind(Intent intent) {
+        handler.removeCallbacks(redirectHomeRunnable);
         instance = null;
         return super.onUnbind(intent);
     }
@@ -308,21 +333,147 @@ public class HomeKeyService extends AccessibilityService {
             return true;
         }
 
+        if ("com.google.android.apps.tv.launcherx".equals(foregroundPackage)) {
+            if (handleDashboardNavigation(event)) {
+                return true;
+            }
+        }
+
         return false;
+    }
+
+    private boolean handleDashboardNavigation(KeyEvent event) {
+        int code = event.getKeyCode();
+        if (code != KeyEvent.KEYCODE_DPAD_UP && code != KeyEvent.KEYCODE_DPAD_DOWN
+                && code != KeyEvent.KEYCODE_DPAD_LEFT && code != KeyEvent.KEYCODE_DPAD_RIGHT
+                && code != KeyEvent.KEYCODE_DPAD_CENTER && code != KeyEvent.KEYCODE_ENTER) {
+            return false;
+        }
+
+        if (event.getAction() == KeyEvent.ACTION_UP) {
+            if (lastHandledNavKey == code) {
+                lastHandledNavKey = 0;
+                return true;
+            }
+            return false;
+        }
+
+        if (event.getAction() != KeyEvent.ACTION_DOWN) {
+            return false;
+        }
+
+        AccessibilityNodeInfo focused = findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
+        if (focused == null) return false;
+
+        try {
+            CharSequence desc = focused.getContentDescription();
+            CharSequence text = focused.getText();
+            boolean isHelp = (desc != null && desc.toString().toLowerCase().contains("help"))
+                    || (text != null && text.toString().toLowerCase().contains("help"));
+
+            if (isHelp) {
+                if (code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_LEFT) {
+                    Rect helpBounds = new Rect();
+                    focused.getBoundsInScreen(helpBounds);
+                    AccessibilityNodeInfo root = getRootInActiveWindow();
+                    if (root != null) {
+                        try {
+                            AccessibilityNodeInfo candidate = findLowestFocusableAbove(root, helpBounds.top);
+                            if (candidate != null) {
+                                try {
+                                    boolean ok = candidate.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
+                                    if (ok) {
+                                        lastHandledNavKey = code;
+                                        return true;
+                                    }
+                                } finally {
+                                    candidate.recycle();
+                                }
+                            }
+                        } finally {
+                            root.recycle();
+                        }
+                    }
+                } else if (code == KeyEvent.KEYCODE_DPAD_DOWN || code == KeyEvent.KEYCODE_DPAD_RIGHT
+                        || code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER) {
+                    lastHandledNavKey = code;
+                    return true;
+                }
+            } else if (code == KeyEvent.KEYCODE_DPAD_DOWN) {
+                AccessibilityNodeInfo nextDown = focused.focusSearch(View.FOCUS_DOWN);
+                if (nextDown != null) {
+                    try {
+                        CharSequence nextDesc = nextDown.getContentDescription();
+                        CharSequence nextText = nextDown.getText();
+                        if ((nextDesc != null && nextDesc.toString().toLowerCase().contains("help"))
+                                || (nextText != null && nextText.toString().toLowerCase().contains("help"))) {
+                            // Don't descend into dead footer Help & feedback icon
+                            lastHandledNavKey = code;
+                            return true;
+                        }
+                    } finally {
+                        nextDown.recycle();
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        } finally {
+            focused.recycle();
+        }
+
+        return false;
+    }
+
+    private AccessibilityNodeInfo findLowestFocusableAbove(AccessibilityNodeInfo node, int maxBottom) {
+        if (node == null) return null;
+        AccessibilityNodeInfo best = null;
+        Rect bestBounds = new Rect();
+
+        List<AccessibilityNodeInfo> queue = new ArrayList<>();
+        queue.add(AccessibilityNodeInfo.obtain(node));
+
+        Rect r = new Rect();
+        while (!queue.isEmpty()) {
+            AccessibilityNodeInfo current = queue.remove(0);
+            if (current.isFocusable()) {
+                current.getBoundsInScreen(r);
+                if (r.bottom <= maxBottom && r.width() > 0 && r.height() > 0) {
+                    if (best == null || r.bottom > bestBounds.bottom
+                            || (r.bottom == bestBounds.bottom && r.right > bestBounds.right)) {
+                        if (best != null) best.recycle();
+                        best = AccessibilityNodeInfo.obtain(current);
+                        bestBounds.set(r);
+                    }
+                }
+            }
+            int childCount = current.getChildCount();
+            for (int i = 0; i < childCount; i++) {
+                AccessibilityNodeInfo child = current.getChild(i);
+                if (child != null) {
+                    queue.add(child);
+                }
+            }
+            current.recycle();
+        }
+        return best;
     }
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
-        if (event == null || event.getEventType() != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return;
+        if (event == null) return;
         CharSequence pkg = event.getPackageName();
         CharSequence cls = event.getClassName();
         if (pkg != null) {
             foregroundPackage = pkg.toString();
         }
-        // Redirect stock Google TV launcher HomeActivity to our launcher while allowing DashboardActivity to stay open.
+
         if (pkg != null && cls != null && "com.google.android.apps.tv.launcherx".contentEquals(pkg)) {
-            if (cls.toString().contains("HomeActivity")) {
-                openHome();
+            String className = cls.toString();
+            if (isAllowedLauncherxActivity(className)) {
+                handler.removeCallbacks(redirectHomeRunnable);
+            } else if (className.contains("HomeActivity")) {
+                handler.removeCallbacks(redirectHomeRunnable);
+                handler.postDelayed(redirectHomeRunnable, 400L);
             }
         }
     }
@@ -331,6 +482,7 @@ public class HomeKeyService extends AccessibilityService {
     public void onInterrupt() {
         handler.removeCallbacks(homeLongPressRunnable);
         handler.removeCallbacks(appsLongPressRunnable);
+        handler.removeCallbacks(redirectHomeRunnable);
         if (pendingSingleTapRunnable != null) {
             handler.removeCallbacks(pendingSingleTapRunnable);
             pendingDoubleTapKey = 0;
