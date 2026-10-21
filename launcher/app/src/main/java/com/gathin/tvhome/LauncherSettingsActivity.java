@@ -133,8 +133,8 @@ public final class LauncherSettingsActivity extends Activity {
         RecyclerView grid = dialogView.findViewById(R.id.wallpaperGrid);
         Button btnInterval = dialogView.findViewById(R.id.btnInterval);
 
-        int[] intervals = {0, 15, 30, 60, 360, 1440};
-        String[] intervalLabels = {"Off", "15 min", "30 min", "1 hour", "6 hours", "Daily"};
+        int[] intervals = {0, 5, 15, 30, 60, 360, 1440};
+        String[] intervalLabels = {"Off", "5 min", "15 min", "30 min", "1 hour", "6 hours", "Daily"};
         int currentMins = choices.getInt("wallpaper_rotation_minutes", 0);
         int currentIdx = 0;
         for (int i = 0; i < intervals.length; i++) {

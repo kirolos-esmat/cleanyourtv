@@ -165,10 +165,11 @@ final class WallpaperPlayer {
 
     void shuffle() {
         if (closed || loading) return;
-        if (OnlineWallpaper.isOnlineChoice(onlineChoice)) {
+        if (OnlineWallpaper.isOnlineChoice(onlineChoice) || files.isEmpty()) {
             loading = true;
             decoder.execute(() -> {
-                File downloaded = OnlineWallpaper.downloadWallpaper(context, onlineChoice, true);
+                String choice = OnlineWallpaper.isOnlineChoice(onlineChoice) ? onlineChoice : OnlineWallpaper.CHOICE_REDDIT;
+                File downloaded = OnlineWallpaper.downloadWallpaper(context, choice, true);
                 root.post(() -> {
                     loading = false;
                     if (closed || !active) return;
@@ -176,7 +177,7 @@ final class WallpaperPlayer {
                         Bitmap bmp = decode(downloaded);
                         if (bmp != null) {
                             applyBitmapWithCrossfade(bmp);
-                            displayed = onlineChoice;
+                            displayed = choice;
                         }
                     }
                 });

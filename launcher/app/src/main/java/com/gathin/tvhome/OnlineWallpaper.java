@@ -73,13 +73,21 @@ final class OnlineWallpaper {
     }
 
     static String resolveUrl(String choice) {
-        if (CHOICE_REDDIT.equals(choice)) {
+        return resolveUrl(choice, false);
+    }
+
+    static String resolveUrl(String choice, boolean forceNext) {
+        if (CHOICE_REDDIT.equals(choice) || forceNext) {
             java.util.List<RedditRssParser.Entry> entries = fetchRedditWallpapers();
             if (!entries.isEmpty()) {
                 int idx = Math.abs(currentRedditIndex++) % entries.size();
                 return entries.get(idx).imageUrl;
             }
-            return fetchBingDailyUrl();
+        }
+        if (forceNext) {
+            String[] pool = {URL_NATURE, URL_AURORA, URL_SPACE, URL_DARK};
+            int idx = Math.abs(currentRedditIndex++) % pool.length;
+            return pool[idx];
         }
         if (CHOICE_NATURE.equals(choice)) return URL_NATURE;
         if (CHOICE_AURORA.equals(choice)) return URL_AURORA;
@@ -163,7 +171,7 @@ final class OnlineWallpaper {
             }
         }
 
-        String downloadUrl = resolveUrl(choice);
+        String downloadUrl = resolveUrl(choice, forceRefresh);
         if (downloadUrl == null) return target.exists() ? target : null;
 
         File tempFile = new File(ctx.getCacheDir(), "online_wallpaper.tmp");

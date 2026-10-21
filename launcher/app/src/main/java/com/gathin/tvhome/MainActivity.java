@@ -542,7 +542,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             open(systemIntent(Settings.ACTION_WIFI_SETTINGS));
             return true;
         });
-        btnSettings.setOnClickListener(v -> showControlCenter());
+        View btnControlCenter = findViewById(R.id.btnControlCenter);
+        if (btnControlCenter != null) btnControlCenter.setOnClickListener(v -> showControlCenter());
+        btnSettings.setOnClickListener(v -> open(systemIntent(Settings.ACTION_SETTINGS)));
         btnReorder = findViewById(R.id.btnReorder);
         btnReorder.setOnClickListener(v -> toggleReorder());
         btnReorder.setVisibility(cfg.reorderButton ? View.VISIBLE : View.GONE);
@@ -558,6 +560,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (iconOnlyButtons) {
             if (cfg.wifiLabelWidth > 0) btnWifi.setMaxWidth(Math.round(cfg.wifiLabelWidth * density));
             else makeIconOnly(btnWifi);
+            if (btnControlCenter instanceof TextView) makeIconOnly((TextView) btnControlCenter);
             makeIconOnly((TextView) btnSettings);
         }
         btnSettings.setOnLongClickListener(v -> {
@@ -2692,7 +2695,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     // ---- Control Center --------------------------------------------------------------------------
 
     private void showControlCenter() {
-        View anchor = findViewById(R.id.btnSettings);
+        View anchor = findViewById(R.id.btnControlCenter);
+        if (anchor == null || anchor.getVisibility() != View.VISIBLE) anchor = findViewById(R.id.btnSettings);
         View panel = getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
         LinearLayout rows = panel.findViewById(R.id.rows);
         int initialWidth = (int) (260 * density);
@@ -2703,17 +2707,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             HomeKeyService.standby();
         });
 
-        // 2. Screen Off / Audio Only
-        addControlCenterRow(rows, popup, R.drawable.ic_picture, "Screen Off / Audio", "Music continues", () -> {
-            startActivity(new Intent(this, BlackoutActivity.class));
-        });
-
-        // 3. Free Up Memory (RAM)
+        // 2. Free Up Memory (RAM)
         addControlCenterRow(rows, popup, R.drawable.ic_apps, "Free Up Memory", getFreeMemorySubtitle(), () -> {
             trimMemoryNow();
         });
 
-        // 4. Storage Cleaner
+        // 3. Storage Cleaner
         addControlCenterRow(rows, popup, R.drawable.ic_home_settings, "Storage Cleaner", getStorageSubtitle(), () -> {
             OnlineWallpaper.clearCache(this);
             try {
@@ -2723,7 +2722,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }
         });
 
-        // 5. Sound Output
+        // 4. Sound Output
         addControlCenterRow(rows, popup, R.drawable.ic_av, "Sound Output", "Audio & Bluetooth", () -> {
             try {
                 Intent soundIntent = new Intent();
@@ -2734,14 +2733,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }
         });
 
-        // 6. Shuffle Wallpaper
+        // 5. Shuffle Wallpaper
         addControlCenterRow(rows, popup, R.drawable.ic_swap_vert, "Shuffle Wallpaper", "Next photo", () -> {
+            Toast.makeText(this, "Shuffling wallpaper...", Toast.LENGTH_SHORT).show();
             if (wallpaperPlayer != null) wallpaperPlayer.shuffle();
-        });
-
-        // 7. Android TV Settings
-        addControlCenterRow(rows, popup, R.drawable.ic_settings, "Android TV Settings", "System settings", () -> {
-            open(systemIntent(Settings.ACTION_SETTINGS));
         });
 
         panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
