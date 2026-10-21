@@ -53,6 +53,27 @@ Things that bit us or contributors, so they don't bite you. Commands use `tools/
 - **Chained `pm` commands** (`pm disable a; pm disable b`) may silently stop after the first. Run
   one per shell call; `--batch` does exactly that.
 - **Large pushes hang** through the Python client. Use `tools/b64push.py` for APKs.
+- **The Input key and CEC die after the hidden factory menu is opened**, seen on a Haier/CVTE set
+  (Durabrand `DURAT32ISDB`, `dupont`, Android TV 11 build `RTM6.230109.232`,
+  [#470](https://github.com/Gathin23/cleanyourtv/issues/470)). `com.cvte.tv.hkcfac` is the
+  manufacturer's production app: `dumpsys package` shows it as a factory component, and it has a
+  launchable activity, so "let me see what this package does" is enough to trigger it. Opening it
+  sets `customer_factory_mode=true` in `/vendor/tvcertificate/fdata.ini` and
+  `vendor.mtk.factory.disable.input=1`. The Input button then does nothing and HDMI-CEC is off, and
+  at the next boot `com.at.factory.factorymanager` disables Play services, Netflix,
+  `com.google.android.katniss` and `com.google.android.apps.mediashell` - `pm enable` from the shell
+  is refused for those, so casting and the store stay gone until the mode is cleared. Read the
+  package instead of starting it. If it has already been opened, start it, send the factory-exit
+  keycode twice **with it in front**, reboot, then turn CEC back on:
+  ```sh
+  tools/tv.py 'am start -n com.cvte.tv.hkcfac/.MainActivity'
+  tools/tv.py 'input keyevent 218; input keyevent 218'
+  tools/tv.py reboot
+  tools/tv.py 'settings put global hdmi_control_enabled 1'
+  ```
+  Press the real Input button afterwards and check the packages are back:
+  `tools/tv.py 'pm list packages -e | grep -E "gms|netflix|mediashell|katniss"'`. More on the unit in
+  the [device notes](devices/durabrand-durat32isdb.md).
 - **`adb exec-out screencap -p` gives a broken PNG** on some MediaTek sets (Xiaomi, and Amazon's
   own Fire TV smart TVs): the binary prints `Init wrapper sys mutex successful` on stdout first.
   Save on the TV and pull the file instead: `screencap -p /data/local/tmp/s.png`, or cut

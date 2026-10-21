@@ -40,8 +40,10 @@ Back up first
   is on, so warn me, and remind me to switch debugging off once you're done.
 - When you finish, close network ADB instead of leaving it open: switch USB debugging and
   Network/ADB debugging off on the TV, revoke the USB debugging authorisations, reboot, and check
-  that `nc -vz <tv ip> 5555` fails. Port 5555 is plaintext, and on firmware with `ro.adb.secure=0`
-  any device on the LAN can get a shell.
+  with `tools/adb-closed.py <tv ip>` that the port refuses the connection. Don't trust `nc` on macOS:
+  Local Network privacy can block it too, and its "No route to host" proves nothing; only "Connection
+  refused" does. Port 5555 is plaintext, and on firmware with `ro.adb.secure=0` any device on the LAN
+  can get a shell.
 
 Debloat
 - List installed packages and sort them into: manufacturer telemetry/analytics, manufacturer content
@@ -56,6 +58,12 @@ Debloat
 - Before touching streaming apps, voice assistant, Chromecast, Miracast or the update service, ask me
   which ones I use with a checklist question and disable only what I don't tick.
 - Run `pm` commands one per shell call, chained commands may silently stop after the first.
+- Don't launch a package whose name says factory, production, AT or fac menu (`com.cvte.tv.hkcfac`,
+  `com.at.factory.*`, `mediatek.factorymenu.ui` and the like) to see what it does, even read-only:
+  on Haier/CVTE boards opening one flips a factory-mode flag that kills the Input key and CEC, and
+  makes the next boot disable Play services, Netflix and Chromecast - which the shell then cannot
+  re-enable. `dumpsys package <name>` tells you what a package is without starting it, and
+  `docs/TROUBLESHOOTING.md` has the way out if one has been opened.
 - Disable in small batches and screenshot between them: a batch can take something load-bearing with
   it and you cannot tell which.
 - After the last batch, reboot once and compare `pm list packages -d` with what you disabled: some
