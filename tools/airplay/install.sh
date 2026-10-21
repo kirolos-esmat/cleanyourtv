@@ -71,12 +71,33 @@ adb -s "$TV_HOST:5555" shell am broadcast \
     --es key low_latency \
     --es value "true" || true
 
-# Compensate audio delay (250ms) to ensure lipsync
+# Force software AAC decoder to bypass hardware stagefright multi-frame queue delay
+adb -s "$TV_HOST:5555" shell am broadcast \
+    -n "$PKG_NAME/.SettingsReceiver" \
+    -a "$PKG_NAME.SET_SETTING" \
+    --es key force_sw_aac \
+    --es value "true" || true
+
+# Disable dynamic auto-buffering to prevent jitter accumulation and audio lag
+adb -s "$TV_HOST:5555" shell am broadcast \
+    -n "$PKG_NAME/.SettingsReceiver" \
+    -a "$PKG_NAME.SET_SETTING" \
+    --es key audio_auto_buffer \
+    --es value "false" || true
+
+# Set tight fixed 10ms audio cushion
+adb -s "$TV_HOST:5555" shell am broadcast \
+    -n "$PKG_NAME/.SettingsReceiver" \
+    -a "$PKG_NAME.SET_SETTING" \
+    --es key audio_cushion_ms \
+    --es value "10" || true
+
+# Report 0ms offset to sender for real-time streaming
 adb -s "$TV_HOST:5555" shell am broadcast \
     -n "$PKG_NAME/.SettingsReceiver" \
     -a "$PKG_NAME.SET_SETTING" \
     --es key audio_latency_ms \
-    --es value "250" || true
+    --es value "0" || true
 
 echo "==> Done! Your TV should now appear in the AirPlay / Screen Mirroring menu on your iPhone/iPad/Mac."
 echo "Note: DRM-protected content (Netflix, Disney+) cannot be mirrored due to Apple FairPlay encryption."
