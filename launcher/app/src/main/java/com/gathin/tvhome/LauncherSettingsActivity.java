@@ -7,9 +7,15 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import androidx.recyclerview.widget.GridLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import java.io.File;
 import java.util.List;
@@ -123,26 +129,75 @@ public final class LauncherSettingsActivity extends Activity {
     }
 
     private void showWallpaperPicker() {
-        List<String> optionKeys = new java.util.ArrayList<>();
-        List<String> optionLabels = new java.util.ArrayList<>();
+        View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_wallpaper_picker, null);
+        RecyclerView grid = dialogView.findViewById(R.id.wallpaperGrid);
+        Button btnInterval = dialogView.findViewById(R.id.btnInterval);
 
-        // 1. Online options (streams from internet, stores single cached file in cacheDir)
-        optionKeys.add(OnlineWallpaper.CHOICE_BING);
-        optionLabels.add(OnlineWallpaper.labelFor(this, OnlineWallpaper.CHOICE_BING));
+        int[] intervals = {0, 15, 30, 60, 360, 1440};
+        String[] intervalLabels = {"Off", "15 min", "30 min", "1 hour", "6 hours", "Daily"};
+        int currentMins = choices.getInt("wallpaper_rotation_minutes", 0);
+        int currentIdx = 0;
+        for (int i = 0; i < intervals.length; i++) {
+            if (intervals[i] == currentMins) {
+                currentIdx = i;
+                break;
+            }
+        }
+        final int[] selectedIntervalIdx = {currentIdx};
+        btnInterval.setText(intervalLabels[selectedIntervalIdx[0]]);
+        btnInterval.setOnClickListener(v -> {
+            selectedIntervalIdx[0] = (selectedIntervalIdx[0] + 1) % intervals.length;
+            int newMins = intervals[selectedIntervalIdx[0]];
+            choices.edit().putInt("wallpaper_rotation_minutes", newMins).apply();
+            btnInterval.setText(intervalLabels[selectedIntervalIdx[0]]);
+            setResult(RESULT_OK);
+        });
 
-        optionKeys.add(OnlineWallpaper.CHOICE_NATURE);
-        optionLabels.add(OnlineWallpaper.labelFor(this, OnlineWallpaper.CHOICE_NATURE));
+        List<WallpaperPickerAdapter.Item> items = new java.util.ArrayList<>();
 
-        optionKeys.add(OnlineWallpaper.CHOICE_AURORA);
-        optionLabels.add(OnlineWallpaper.labelFor(this, OnlineWallpaper.CHOICE_AURORA));
+        // 1. Reddit r/wallpapers (Hot)
+        items.add(new WallpaperPickerAdapter.Item(
+                OnlineWallpaper.CHOICE_REDDIT,
+                "Reddit Wallpapers",
+                "r/wallpapers (Hot)",
+                "https://preview.redd.it/c7p9uw1miowh1.jpeg?width=640"
+        ));
 
-        optionKeys.add(OnlineWallpaper.CHOICE_SPACE);
-        optionLabels.add(OnlineWallpaper.labelFor(this, OnlineWallpaper.CHOICE_SPACE));
+        // 2. Daily Bing
+        items.add(new WallpaperPickerAdapter.Item(
+                OnlineWallpaper.CHOICE_BING,
+                "Daily Bing",
+                "Microsoft Bing",
+                OnlineWallpaper.resolveUrl(OnlineWallpaper.CHOICE_BING)
+        ));
 
-        optionKeys.add(OnlineWallpaper.CHOICE_DARK);
-        optionLabels.add(OnlineWallpaper.labelFor(this, OnlineWallpaper.CHOICE_DARK));
+        // 3. Curated Unsplash Photos
+        items.add(new WallpaperPickerAdapter.Item(
+                OnlineWallpaper.CHOICE_NATURE,
+                "Nature",
+                "Unsplash Curated",
+                OnlineWallpaper.URL_NATURE
+        ));
+        items.add(new WallpaperPickerAdapter.Item(
+                OnlineWallpaper.CHOICE_AURORA,
+                "Aurora",
+                "Unsplash Curated",
+                OnlineWallpaper.URL_AURORA
+        ));
+        items.add(new WallpaperPickerAdapter.Item(
+                OnlineWallpaper.CHOICE_SPACE,
+                "Deep Space",
+                "Unsplash Curated",
+                OnlineWallpaper.URL_SPACE
+        ));
+        items.add(new WallpaperPickerAdapter.Item(
+                OnlineWallpaper.CHOICE_DARK,
+                "Minimal Dark",
+                "Unsplash Curated",
+                OnlineWallpaper.URL_DARK
+        ));
 
-        // 2. Local wallpapers from theme if any
+        // 4. Local theme wallpapers / scenes
         File dir = Config.dir(this);
         List<File> images = new java.util.ArrayList<>(WallpaperRotation.images(
                 dir == null ? null : new File(dir, "wallpapers")));
@@ -150,35 +205,66 @@ public final class LauncherSettingsActivity extends Activity {
         if (single != null && single.isFile()) images.add(0, single);
 
         for (File img : images) {
-            optionKeys.add(img.getName());
-            optionLabels.add(img.getName());
+            items.add(new WallpaperPickerAdapter.Item(
+                    img.getName(),
+                    img.getName().replace(".jpg", "").replace(".png", "").replace(".webp", ""),
+                    "Local / Scene",
+                    img.getAbsolutePath()
+            ));
         }
 
-        // 3. None option
-        optionKeys.add("none");
-        optionLabels.add(getString(R.string.wallpaper_none));
+        // 5. None
+        items.add(new WallpaperPickerAdapter.Item(
+                "none",
+                getString(R.string.wallpaper_none),
+                "Solid Dark",
+                ""
+        ));
 
-        String current = choices.getString(Config.WALLPAPER_CHOICE_KEY, null);
-        int checked = current != null ? optionKeys.indexOf(current) : -1;
+        String currentChoice = choices.getString(Config.WALLPAPER_CHOICE_KEY, OnlineWallpaper.CHOICE_BING);
 
-        String[] labels = optionLabels.toArray(new String[0]);
-        new AlertDialog.Builder(this)
-                .setTitle(R.string.wallpaper_label)
-                .setSingleChoiceItems(labels, checked, (dialog, which) -> {
-                    dialog.dismiss();
-                    String selectedKey = optionKeys.get(which);
-                    choices.edit().putString(Config.WALLPAPER_CHOICE_KEY, selectedKey).apply();
-                    setResult(RESULT_OK);
-                    Toast.makeText(this, R.string.wallpaper_applied, Toast.LENGTH_SHORT).show();
-                    refresh();
-                })
-                .setNeutralButton(R.string.wallpaper_theme_default, (dialog, which) -> {
-                    choices.edit().remove(Config.WALLPAPER_CHOICE_KEY).apply();
-                    setResult(RESULT_OK);
-                    refresh();
-                })
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setView(dialogView)
                 .setNegativeButton(android.R.string.cancel, null)
-                .show();
+                .create();
+
+        grid.setLayoutManager(new GridLayoutManager(this, 3));
+        WallpaperPickerAdapter adapter = new WallpaperPickerAdapter(this, items, currentChoice, item -> {
+            dialog.dismiss();
+            choices.edit().putString(Config.WALLPAPER_CHOICE_KEY, item.key).apply();
+            setResult(RESULT_OK);
+            Toast.makeText(this, R.string.wallpaper_applied, Toast.LENGTH_SHORT).show();
+            refresh();
+        });
+        grid.setAdapter(adapter);
+
+        dialog.show();
+        grid.post(() -> {
+            View first = grid.getChildAt(0);
+            if (first != null) first.requestFocus();
+        });
+
+        // Background thread: enrich Reddit thumbnail from live feed if available
+        new Thread(() -> {
+            java.util.List<RedditRssParser.Entry> redditEntries = OnlineWallpaper.fetchRedditWallpapers();
+            if (!redditEntries.isEmpty()) {
+                String latestThumb = redditEntries.get(0).thumbnailUrl;
+                runOnUiThread(() -> {
+                    for (int i = 0; i < items.size(); i++) {
+                        if (OnlineWallpaper.CHOICE_REDDIT.equals(items.get(i).key)) {
+                            items.set(i, new WallpaperPickerAdapter.Item(
+                                    OnlineWallpaper.CHOICE_REDDIT,
+                                    "Reddit Wallpapers",
+                                    "r/wallpapers (" + redditEntries.size() + " photos)",
+                                    latestThumb
+                            ));
+                            adapter.notifyItemChanged(i);
+                            break;
+                        }
+                    }
+                });
+            }
+        }).start();
     }
 
     private void setAdvanced(boolean enabled) {

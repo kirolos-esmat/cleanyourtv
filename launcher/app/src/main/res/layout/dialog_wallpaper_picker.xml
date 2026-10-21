@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="#EE101318"
+    android:padding="20dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="16dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/wallpaper_label"
+            android:textColor="#FFFFFFFF"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:fontFamily="@font/outfit_medium" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="10dp"
+            android:text="Rotation:"
+            android:textColor="#FFAAAAAA"
+            android:textSize="14sp"
+            android:fontFamily="@font/outfit" />
+
+        <Button
+            android:id="@+id/btnInterval"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:background="@drawable/settings_choice_bg"
+            android:textColor="#FFFFFFFF"
+            android:textSize="13sp"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:text="Off"
+            android:fontFamily="@font/outfit_medium"
+            android:focusable="true" />
+    </LinearLayout>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/wallpaperGrid"
+        android:layout_width="match_parent"
+        android:layout_height="380dp"
+        android:clipToPadding="false"
+        android:scrollbars="vertical"
+        android:descendantFocusability="afterDescendants"
+        android:focusable="false" />
+</LinearLayout>

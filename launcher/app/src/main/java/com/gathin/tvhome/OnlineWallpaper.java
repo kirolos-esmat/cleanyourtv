@@ -22,10 +22,15 @@ final class OnlineWallpaper {
     private OnlineWallpaper() {}
 
     static final String CHOICE_BING = "online:bing";
+    static final String CHOICE_REDDIT = "online:reddit";
     static final String CHOICE_NATURE = "online:nature";
     static final String CHOICE_AURORA = "online:aurora";
     static final String CHOICE_SPACE = "online:space";
     static final String CHOICE_DARK = "online:dark";
+
+    private static final String REDDIT_RSS_URL = "https://www.reddit.com/r/wallpapers/hot.rss?limit=25";
+    private static volatile java.util.List<RedditRssParser.Entry> cachedRedditEntries = new java.util.ArrayList<>();
+    private static volatile int currentRedditIndex = 0;
 
     static final String URL_NATURE = "https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=1920&q=80";
     static final String URL_AURORA = "https://images.unsplash.com/photo-1531366936337-7c912a4589a7?w=1920&q=80";
@@ -38,6 +43,7 @@ final class OnlineWallpaper {
 
     static String labelFor(Context ctx, String choice) {
         if (CHOICE_BING.equals(choice)) return "Daily Bing (Internet)";
+        if (CHOICE_REDDIT.equals(choice)) return "Reddit Wallpapers (r/wallpapers)";
         if (CHOICE_NATURE.equals(choice)) return "Nature (Internet)";
         if (CHOICE_AURORA.equals(choice)) return "Aurora (Internet)";
         if (CHOICE_SPACE.equals(choice)) return "Deep Space (Internet)";
@@ -45,7 +51,36 @@ final class OnlineWallpaper {
         return "Internet Wallpaper";
     }
 
+    static java.util.List<RedditRssParser.Entry> fetchRedditWallpapers() {
+        if (!cachedRedditEntries.isEmpty()) return cachedRedditEntries;
+        try {
+            URL url = new URL(REDDIT_RSS_URL);
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestProperty("User-Agent", "tvhome/2.5 (Android TV wallpaper)");
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(8000);
+            if (conn.getResponseCode() == 200) {
+                java.util.List<RedditRssParser.Entry> list = RedditRssParser.parse(conn.getInputStream());
+                if (!list.isEmpty()) {
+                    cachedRedditEntries = list;
+                    return list;
+                }
+            }
+        } catch (Exception e) {
+            Log.w("TvHome.OnlineWallpaper", "Failed to fetch Reddit wallpapers: " + e.getMessage());
+        }
+        return cachedRedditEntries;
+    }
+
     static String resolveUrl(String choice) {
+        if (CHOICE_REDDIT.equals(choice)) {
+            java.util.List<RedditRssParser.Entry> entries = fetchRedditWallpapers();
+            if (!entries.isEmpty()) {
+                int idx = Math.abs(currentRedditIndex++) % entries.size();
+                return entries.get(idx).imageUrl;
+            }
+            return fetchBingDailyUrl();
+        }
         if (CHOICE_NATURE.equals(choice)) return URL_NATURE;
         if (CHOICE_AURORA.equals(choice)) return URL_AURORA;
         if (CHOICE_SPACE.equals(choice)) return URL_SPACE;
@@ -83,18 +118,43 @@ final class OnlineWallpaper {
         return new File(ctx.getCacheDir(), "online_wallpaper.jpg");
     }
 
+    static File getNextCacheFile(Context ctx) {
+        return new File(ctx.getCacheDir(), "online_wallpaper_next.jpg");
+    }
+
+    static void clearCache(Context ctx) {
+        File c1 = getCacheFile(ctx);
+        if (c1.exists()) c1.delete();
+        File c2 = getNextCacheFile(ctx);
+        if (c2.exists()) c2.delete();
+        File thumbs = new File(ctx.getCacheDir(), "wp_thumbs");
+        if (thumbs.exists() && thumbs.isDirectory()) {
+            File[] files = thumbs.listFiles();
+            if (files != null) {
+                for (File f : files) f.delete();
+            }
+            thumbs.delete();
+        }
+    }
+
     static File downloadWallpaper(Context ctx, String choice) {
+        return downloadWallpaper(ctx, choice, false);
+    }
+
+    static File downloadWallpaper(Context ctx, String choice, boolean forceRefresh) {
         File target = getCacheFile(ctx);
         boolean isBing = choice == null || CHOICE_BING.equals(choice);
+        boolean isStatic = CHOICE_NATURE.equals(choice) || CHOICE_AURORA.equals(choice)
+                || CHOICE_SPACE.equals(choice) || CHOICE_DARK.equals(choice);
         long now = System.currentTimeMillis();
 
-        if (target.exists() && target.length() > 0) {
+        if (!forceRefresh && target.exists() && target.length() > 0) {
             String cachedChoice = ctx.getSharedPreferences("tvhome_online_wp", Context.MODE_PRIVATE)
                     .getString("cached_choice", "");
             if (choice != null && choice.equals(cachedChoice)) {
-                if (!isBing) {
+                if (isStatic) {
                     return target;
-                } else {
+                } else if (isBing) {
                     long lastModified = target.lastModified();
                     if (now - lastModified < 12 * 3600_000L) {
                         return target;
@@ -110,6 +170,7 @@ final class OnlineWallpaper {
         try {
             URL url = new URL(downloadUrl);
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestProperty("User-Agent", "tvhome/2.5 (Android TV wallpaper)");
             conn.setConnectTimeout(10000);
             conn.setReadTimeout(15000);
             conn.setInstanceFollowRedirects(true);

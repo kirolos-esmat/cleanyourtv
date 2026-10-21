@@ -40,6 +40,7 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
+import android.os.StatFs;
 import android.os.SystemClock;
 import android.provider.Settings;
 import android.text.SpannableString;
@@ -541,7 +542,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             open(systemIntent(Settings.ACTION_WIFI_SETTINGS));
             return true;
         });
-        btnSettings.setOnClickListener(v -> open(systemIntent(Settings.ACTION_SETTINGS)));
+        btnSettings.setOnClickListener(v -> showControlCenter());
         btnReorder = findViewById(R.id.btnReorder);
         btnReorder.setOnClickListener(v -> toggleReorder());
         btnReorder.setVisibility(cfg.reorderButton ? View.VISIBLE : View.GONE);
@@ -2686,6 +2687,170 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         final Intent launchIntent = intent;
         addInputRow(rows, popup, R.drawable.ic_livetv, title, -1, () -> open(launchIntent));
+    }
+
+    // ---- Control Center --------------------------------------------------------------------------
+
+    private void showControlCenter() {
+        View anchor = findViewById(R.id.btnSettings);
+        View panel = getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
+        LinearLayout rows = panel.findViewById(R.id.rows);
+        int initialWidth = (int) (260 * density);
+        PopupWindow popup = glassPopup(panel, initialWidth);
+
+        // 1. Turn Off Now (Standby)
+        addControlCenterRow(rows, popup, R.drawable.ic_lock, "Turn Off Now", "Standby", () -> {
+            HomeKeyService.standby();
+        });
+
+        // 2. Screen Off / Audio Only
+        addControlCenterRow(rows, popup, R.drawable.ic_picture, "Screen Off / Audio", "Music continues", () -> {
+            startActivity(new Intent(this, BlackoutActivity.class));
+        });
+
+        // 3. Free Up Memory (RAM)
+        addControlCenterRow(rows, popup, R.drawable.ic_apps, "Free Up Memory", getFreeMemorySubtitle(), () -> {
+            trimMemoryNow();
+        });
+
+        // 4. Storage Cleaner
+        addControlCenterRow(rows, popup, R.drawable.ic_home_settings, "Storage Cleaner", getStorageSubtitle(), () -> {
+            OnlineWallpaper.clearCache(this);
+            try {
+                startActivity(new Intent(Settings.ACTION_INTERNAL_STORAGE_SETTINGS));
+            } catch (Exception e) {
+                open(systemIntent(Settings.ACTION_SETTINGS));
+            }
+        });
+
+        // 5. Sound Output
+        addControlCenterRow(rows, popup, R.drawable.ic_av, "Sound Output", "Audio & Bluetooth", () -> {
+            try {
+                Intent soundIntent = new Intent();
+                soundIntent.setComponent(new ComponentName("com.android.tv.settings", "com.android.tv.settings.device.displaysound.DisplaySoundActivity"));
+                startActivity(soundIntent);
+            } catch (Exception e) {
+                open(systemIntent(Settings.ACTION_SETTINGS));
+            }
+        });
+
+        // 6. Shuffle Wallpaper
+        addControlCenterRow(rows, popup, R.drawable.ic_swap_vert, "Shuffle Wallpaper", "Next photo", () -> {
+            if (wallpaperPlayer != null) wallpaperPlayer.shuffle();
+        });
+
+        // 7. Android TV Settings
+        addControlCenterRow(rows, popup, R.drawable.ic_settings, "Android TV Settings", "System settings", () -> {
+            open(systemIntent(Settings.ACTION_SETTINGS));
+        });
+
+        panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+        popup.setWidth(Math.max(initialWidth, panel.getMeasuredWidth()));
+        dropIn(popup, panel, anchor, getResources().getBoolean(R.bool.rtl_menu_bar)
+                ? Gravity.START : Gravity.END);
+        rows.getChildAt(0).requestFocus();
+    }
+
+    private void addControlCenterRow(LinearLayout rows, PopupWindow popup, int iconRes, String title, String subtitle, Runnable action) {
+        View row = getLayoutInflater().inflate(R.layout.item_input, rows, false);
+        ImageView icon = row.findViewById(R.id.icon);
+        if (iconRes != 0) {
+            icon.setImageResource(iconRes);
+            icon.setVisibility(View.VISIBLE);
+        } else {
+            icon.setVisibility(View.GONE);
+        }
+        row.findViewById(R.id.dot).setVisibility(View.GONE);
+        ((TextView) row.findViewById(R.id.title)).setText(title);
+
+        TextView status = row.findViewById(R.id.status);
+        if (subtitle != null && !subtitle.isEmpty()) {
+            status.setText(subtitle);
+            status.setVisibility(View.VISIBLE);
+        } else {
+            status.setVisibility(View.GONE);
+        }
+
+        row.setOnClickListener(v -> {
+            popup.dismiss();
+            action.run();
+        });
+
+        final boolean[] pressed = {false};
+        row.setOnKeyListener((v, code, event) -> {
+            if (code != KeyEvent.KEYCODE_DPAD_CENTER && code != KeyEvent.KEYCODE_ENTER) return false;
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                if (event.getRepeatCount() == 0) pressed[0] = true;
+                return true;
+            }
+            boolean activate = pressed[0];
+            pressed[0] = false;
+            if (activate) {
+                popup.dismiss();
+                action.run();
+            }
+            return true;
+        });
+        rows.addView(row);
+    }
+
+    private String getFreeMemorySubtitle() {
+        try {
+            android.app.ActivityManager am = (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
+            if (am != null) {
+                android.app.ActivityManager.MemoryInfo mi = new android.app.ActivityManager.MemoryInfo();
+                am.getMemoryInfo(mi);
+                long freeMb = mi.availMem / (1024 * 1024L);
+                return freeMb + " MB free";
+            }
+        } catch (Exception ignored) {}
+        return "Trim";
+    }
+
+    private void trimMemoryNow() {
+        try {
+            android.app.ActivityManager am = (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
+            if (am != null) {
+                android.app.ActivityManager.MemoryInfo before = new android.app.ActivityManager.MemoryInfo();
+                am.getMemoryInfo(before);
+
+                android.content.pm.PackageManager pm = getPackageManager();
+                List<ApplicationInfo> apps = pm.getInstalledApplications(0);
+                for (ApplicationInfo app : apps) {
+                    if (!app.packageName.equals(getPackageName())) {
+                        am.killBackgroundProcesses(app.packageName);
+                    }
+                }
+                System.gc();
+
+                android.app.ActivityManager.MemoryInfo after = new android.app.ActivityManager.MemoryInfo();
+                am.getMemoryInfo(after);
+                long delta = (after.availMem - before.availMem) / (1024 * 1024L);
+                if (delta > 0) {
+                    android.widget.Toast.makeText(this, "Freed " + delta + " MB RAM", android.widget.Toast.LENGTH_SHORT).show();
+                } else {
+                    android.widget.Toast.makeText(this, "Memory optimized", android.widget.Toast.LENGTH_SHORT).show();
+                }
+            }
+        } catch (Exception e) {
+            android.widget.Toast.makeText(this, "Memory optimized", android.widget.Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private String getStorageSubtitle() {
+        try {
+            File path = Environment.getDataDirectory();
+            StatFs stat = new StatFs(path.getPath());
+            long availBytes = stat.getAvailableBlocksLong() * stat.getBlockSizeLong();
+            long availGb = availBytes / (1024 * 1024 * 1024L);
+            if (availGb > 0) {
+                return String.format(java.util.Locale.US, "%.1f GB free", (float) availBytes / (1024 * 1024 * 1024L));
+            } else {
+                long availMb = availBytes / (1024 * 1024L);
+                return availMb + " MB free";
+            }
+        } catch (Exception ignored) {}
+        return "Manage";
     }
 
     // ---- launcher settings and module cards -------------------------------------------------------

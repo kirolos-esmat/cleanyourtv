@@ -23,6 +23,7 @@ final class WallpaperPlayer {
     private final Context context;
     private final FrameLayout root;
     private final ImageView image;
+    private ImageView crossfadeImage;
     private final List<File> files;
     private final long interval;
     private final String order;
@@ -126,9 +127,80 @@ final class WallpaperPlayer {
                 if (downloaded != null && downloaded.exists()) {
                     Bitmap bmp = decode(downloaded);
                     if (bmp != null) {
-                        image.setImageBitmap(bmp);
+                        applyBitmapWithCrossfade(bmp);
                         displayed = onlineChoice;
                     }
+                }
+            });
+        });
+    }
+
+    private void applyBitmapWithCrossfade(Bitmap bmp) {
+        if (bmp == null) return;
+        if (image.getDrawable() == null) {
+            image.setImageBitmap(bmp);
+            return;
+        }
+        if (crossfadeImage == null) {
+            crossfadeImage = new ImageView(context);
+            crossfadeImage.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            crossfadeImage.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            int idx = root.indexOfChild(image);
+            root.addView(crossfadeImage, idx + 1, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        }
+        crossfadeImage.setImageBitmap(bmp);
+        crossfadeImage.setAlpha(0f);
+        crossfadeImage.setVisibility(View.VISIBLE);
+        crossfadeImage.animate()
+                .alpha(1f)
+                .setDuration(350L)
+                .withEndAction(() -> {
+                    image.setImageBitmap(bmp);
+                    crossfadeImage.setVisibility(View.GONE);
+                    crossfadeImage.setImageDrawable(null);
+                })
+                .start();
+    }
+
+    void shuffle() {
+        if (closed || loading) return;
+        if (OnlineWallpaper.isOnlineChoice(onlineChoice)) {
+            loading = true;
+            decoder.execute(() -> {
+                File downloaded = OnlineWallpaper.downloadWallpaper(context, onlineChoice, true);
+                root.post(() -> {
+                    loading = false;
+                    if (closed || !active) return;
+                    if (downloaded != null && downloaded.exists()) {
+                        Bitmap bmp = decode(downloaded);
+                        if (bmp != null) {
+                            applyBitmapWithCrossfade(bmp);
+                            displayed = onlineChoice;
+                        }
+                    }
+                });
+            });
+            return;
+        }
+        if (files.isEmpty()) return;
+        String previous = preferences.getString("image", "");
+        File next = WallpaperRotation.pick(files, previous, random);
+        if (next == null) return;
+        loading = true;
+        decoder.execute(() -> {
+            Bitmap bitmap = decode(next);
+            root.post(() -> {
+                loading = false;
+                if (closed || !active) {
+                    if (bitmap != null) bitmap.recycle();
+                    return;
+                }
+                if (bitmap != null) {
+                    applyBitmapWithCrossfade(bitmap);
+                    displayed = next.getName();
+                    preferences.edit().putString("image", displayed)
+                            .putLong("changed", System.currentTimeMillis()).apply();
                 }
             });
         });
@@ -147,6 +219,10 @@ final class WallpaperPlayer {
         active = false;
         closed = true;
         decoder.shutdownNow();
+        if (crossfadeImage != null) {
+            crossfadeImage.animate().cancel();
+            crossfadeImage.setImageDrawable(null);
+        }
     }
 
     void update() {
@@ -179,7 +255,7 @@ final class WallpaperPlayer {
                     update();
                     return;
                 }
-                image.setImageBitmap(bitmap);
+                applyBitmapWithCrossfade(bitmap);
                 displayed = next.getName();
                 if (!displayed.equals(previous) || changed == 0) {
                     preferences.edit().putString("image", displayed)

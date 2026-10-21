@@ -24,6 +24,8 @@ import java.util.Map;
  */
 public class HomeKeyService extends AccessibilityService {
 
+    public static volatile HomeKeyService instance;
+
     private static final long DOUBLE_TAP_MS = 300L;
     private static final long LONG_PRESS_MS = 400L;
 
@@ -69,6 +71,7 @@ public class HomeKeyService extends AccessibilityService {
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
+        instance = this;
         AccessibilityServiceInfo info = getServiceInfo();
         if (info != null) {
             info.flags |= AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS;
@@ -81,6 +84,19 @@ public class HomeKeyService extends AccessibilityService {
         appKeys = RemoteKeys.parseAppKeys(config.appKeys);
         appDoubleKeys = RemoteKeys.parseDoubleTapAppKeys(config.appKeys);
         appScancodes = RemoteKeys.parseAppScancodes(config.appKeys);
+    }
+
+    @Override
+    public boolean onUnbind(Intent intent) {
+        instance = null;
+        return super.onUnbind(intent);
+    }
+
+    public static boolean standby() {
+        if (instance != null) {
+            return instance.performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN);
+        }
+        return false;
     }
 
     private boolean isSettingsKey(KeyEvent event) {
