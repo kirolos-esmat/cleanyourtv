@@ -25,38 +25,29 @@
 
 ## ✨ Features in this Fork
 
-This fork introduces key features, performance optimizations, and remote-friendly utilities built for everyday TV use:
+This fork adds live weather, a quick control center, interactive tile reordering, integrated remote keys, custom IPTV inputs, dynamic wallpapers, and automated TV setup:
 
-### 1. Live Weather & Dynamic Top Bar
-<p align="center">
-  <img src="docs/custom-home.jpg" alt="Clean Home Screen with Live Weather" width="850">
-</p>
+| | |
+|---|---|
+| ![Live weather with Open-Meteo, auto-location and hero metadata](docs/custom-home.jpg) | ![Quick Control Center: Standby, RAM & storage cleaner, audio and wallpaper shuffle](docs/custom-control-center.jpg) |
+| *Live weather with Open-Meteo, auto-location and hero metadata* | *Quick Control Center: Standby, RAM & storage cleaner, audio and wallpaper shuffle* |
+| ![Interactive tile reordering: hold OK on any app to Move and reposition](docs/custom-tile-reorder.jpg) | ![Hold Home: native Google TV Quick Settings overlay via HomeKeyService](docs/custom-quick-settings.jpg) |
+| *Interactive tile reordering, hold OK to Move and reposition* | *Hold Home: Google TV Quick Settings overlay via HomeKeyService* |
+| ![Inputs menu: quick streaming shortcuts for IPTV Smarters Pro, NostalgiaTV and Live Channels](docs/custom-inputs.jpg) | ![Dynamic 32-bit true color wallpapers (Reddit RSS / Unsplash) with 5m auto-rotation](docs/custom-wallpaper.jpg) |
+| *Inputs menu: shortcuts for IPTV Smarters Pro, NostalgiaTV, Live TV* | *Dynamic 32-bit true color wallpapers, 5-minute auto-rotation* |
 
-* **Real-Time Weather Widget:** Powered by [Open-Meteo](https://open-meteo.com) above the date, displaying current conditions, temperature, and auto-detected city location with network provider fallback and intelligent caching.
-* **Top-Bar Control Hub:** Modern pill-shaped navigation with instant access to Inputs, Control Center, and Settings.
-* **Dynamic Wallpapers & 32-Bit True Color:** Background rotation supporting online feeds (Reddit RSS / Unsplash), full 32-bit true color rendering (no color banding), and 5-minute automated shuffle intervals.
-
-### 2. Quick Control Center
-<p align="center">
-  <img src="docs/custom-control-center.jpg" alt="Quick Control Center" width="850">
-</p>
-
-* **One-Click TV Controls:** Accessible directly from the top-bar header icon next to Settings.
-* **Instant Standby:** Put the TV into sleep mode cleanly without digging through system menus.
-* **Free Up Memory (RAM Cleaner):** Real-time free memory reporting with one-tap background process pruning.
-* **Storage Cleaner:** Live internal storage monitoring and quick cleaner access.
-* **Sound Output Switcher:** Instant shortcut to Audio and Bluetooth device settings.
-* **Wallpaper Shuffle:** Rotate to the next high-resolution scene on demand.
-
-### 3. Interactive Remote Tile Management & Integrated Keys
-<p align="center">
-  <img src="docs/custom-tile-reorder.jpg" width="49%" alt="Tile Context Menu" />
-  <img src="docs/custom-quick-settings.jpg" width="49%" alt="Google TV Quick Settings" />
-</p>
-
-* **Remote-Friendly Tile Reordering:** Long-press `OK` on any dock or grid tile to open the visual menu and reposition apps directly using your remote.
-* **Native Key Handling (`HomeKeyService`):** Integrated accessibility service replacing third-party button mappers. Long-press or double-tap Home directly summons the native Google TV Quick Settings overlay.
-* **Smart Inputs Support:** Preserves inputs shortcuts for custom TV and streaming applications like IPTV Smarters Pro, NostalgiaTV, and Xiaomi TV+.
+- **Live Weather Widget:** Powered by [Open-Meteo](https://open-meteo.com) above the date, showing current conditions, temperature, and auto-detected city name (via Wi-Fi/network provider) with intelligent caching and periodic background refresh.
+- **Quick Control Center:** Header bar pill icon opening instant controls:
+  - **Turn Off Now:** Puts TV into low-power standby with a single click.
+  - **Free Up Memory:** Real-time RAM statistics and background process pruning.
+  - **Storage Cleaner:** Live storage stats and direct cleaner shortcut.
+  - **Sound Output:** Instant toggle for Audio and Bluetooth output settings.
+  - **Shuffle Wallpaper:** On-demand rotation to the next online photo.
+- **Interactive Remote Tile Reordering:** Long-press `OK` on any dock or grid tile to open the visual menu and reposition apps directly using the remote.
+- **Integrated Key Service (`HomeKeyService`):** Lightweight native accessibility service replacing third-party Button Mapper. Long-press or double-tap Home summons the native Google TV Quick Settings / Dashboard overlay without needing the stock launcher running.
+- **Smart Inputs Menu:** Custom-configured inputs popup preserving shortcuts for streaming and IPTV apps (IPTV Smarters Pro, NostalgiaTV, Live Channels, Xiaomi TV+).
+- **Dynamic Online Wallpapers (Reddit RSS / Unsplash):** Automated background fetching, full 32-bit true color rendering (no color banding), and 5-minute rotation intervals.
+- **Automated Setup Script (`apply-my-tv.sh`):** One-step shell script to debloat, configure keys, setup weather coordinates, and apply settings to any Android TV over Wi-Fi.
 
 ---
 
