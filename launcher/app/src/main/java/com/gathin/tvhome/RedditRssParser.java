@@ -37,8 +37,7 @@ final class RedditRssParser {
 
     static List<Entry> parse(InputStream in) {
         if (in == null) return Collections.emptyList();
-        try {
-            BufferedReader reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
             StringBuilder sb = new StringBuilder();
             String line;
             while ((line = reader.readLine()) != null) {

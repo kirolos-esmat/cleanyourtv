@@ -33,6 +33,10 @@ final class WallpaperThumbnailLoader {
 
     private WallpaperThumbnailLoader() {}
 
+    static void evictAll() {
+        memoryCache.evictAll();
+    }
+
     static void load(Context context, String source, ImageView targetView) {
         if (source == null || targetView == null) return;
 

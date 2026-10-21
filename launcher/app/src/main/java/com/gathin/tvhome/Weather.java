@@ -74,8 +74,10 @@ final class Weather {
 
         long now = System.currentTimeMillis();
         long lastTime = p.getLong("time", 0);
-        // If location was previously from IP, try upgrading to device location if available
-        boolean upgrade = !hasConfigCoords && !"device".equals(p.getString("src", "")) && locationOn(app);
+        long lastUpgradeAttempt = p.getLong("upgrade_attempt", 0);
+        // If location was previously from IP, try upgrading to device location if available, but at most once per day
+        boolean upgrade = !hasConfigCoords && !"device".equals(p.getString("src", "")) && locationOn(app)
+                && (now - lastUpgradeAttempt > LOCATION_MS);
 
         if ((cached != null && now - lastTime < WEATHER_MS && !upgrade) || running) {
             Log.d(TAG, "refresh not needed yet: running=" + running);
@@ -125,9 +127,12 @@ final class Weather {
             } else {
                 long now = System.currentTimeMillis();
                 boolean staleLoc = now - p.getLong("locTime", 0) > LOCATION_MS || !p.contains("lat");
-                boolean upgrade = !"device".equals(p.getString("src", "")) && locationOn(ctx);
+                long lastUpgrade = p.getLong("upgrade_attempt", 0);
+                boolean upgrade = !"device".equals(p.getString("src", "")) && locationOn(ctx)
+                        && (now - lastUpgrade > LOCATION_MS);
                 Log.d(TAG, "resolving location: stale=" + staleLoc + " upgrade=" + upgrade);
                 if (staleLoc || upgrade) {
+                    if (upgrade) p.edit().putLong("upgrade_attempt", now).apply();
                     boolean found = locateDevice(ctx, p);
                     if (!found && staleLoc) found = locate(p, "https://ipwho.is/") || locate(p, "https://ipapi.co/json/");
                     if (!found && !p.contains("lat")) return null;

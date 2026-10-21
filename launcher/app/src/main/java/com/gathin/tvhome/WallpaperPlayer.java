@@ -4,6 +4,8 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.View;
@@ -130,6 +132,10 @@ final class WallpaperPlayer {
                 if (downloaded != null && downloaded.exists()) {
                     Bitmap bmp = decode(downloaded);
                     if (bmp != null) {
+                        if (closed || !active) {
+                            bmp.recycle();
+                            return;
+                        }
                         applyBitmapWithCrossfade(bmp);
                         displayed = onlineChoice;
                     }
@@ -151,6 +157,19 @@ final class WallpaperPlayer {
             int idx = root.indexOfChild(image);
             root.addView(crossfadeImage, idx + 1, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        } else {
+            crossfadeImage.animate().cancel();
+            Drawable pending = crossfadeImage.getDrawable();
+            if (pending instanceof BitmapDrawable) {
+                Bitmap pendingBmp = ((BitmapDrawable) pending).getBitmap();
+                if (pendingBmp != null && !pendingBmp.isRecycled() && pendingBmp != bmp) {
+                    Drawable current = image.getDrawable();
+                    if (!(current instanceof BitmapDrawable) || ((BitmapDrawable) current).getBitmap() != pendingBmp) {
+                        pendingBmp.recycle();
+                    }
+                }
+            }
+            crossfadeImage.setImageDrawable(null);
         }
         crossfadeImage.setImageBitmap(bmp);
         crossfadeImage.setAlpha(0f);
@@ -159,7 +178,14 @@ final class WallpaperPlayer {
                 .alpha(1f)
                 .setDuration(350L)
                 .withEndAction(() -> {
+                    Drawable old = image.getDrawable();
                     image.setImageBitmap(bmp);
+                    if (old instanceof BitmapDrawable) {
+                        Bitmap oldBmp = ((BitmapDrawable) old).getBitmap();
+                        if (oldBmp != null && !oldBmp.isRecycled() && oldBmp != bmp) {
+                            oldBmp.recycle();
+                        }
+                    }
                     crossfadeImage.setVisibility(View.GONE);
                     crossfadeImage.setImageDrawable(null);
                 })
@@ -181,6 +207,10 @@ final class WallpaperPlayer {
                     if (downloaded != null && downloaded.exists()) {
                         Bitmap bmp = decode(downloaded);
                         if (bmp != null) {
+                            if (closed || !active) {
+                                bmp.recycle();
+                                return;
+                            }
                             applyBitmapWithCrossfade(bmp);
                             displayed = choice;
                             preferences.edit().putLong("changed", System.currentTimeMillis()).apply();
@@ -228,7 +258,34 @@ final class WallpaperPlayer {
         decoder.shutdownNow();
         if (crossfadeImage != null) {
             crossfadeImage.animate().cancel();
+            Drawable pending = crossfadeImage.getDrawable();
+            if (pending instanceof BitmapDrawable) {
+                Bitmap b = ((BitmapDrawable) pending).getBitmap();
+                if (b != null && !b.isRecycled()) b.recycle();
+            }
             crossfadeImage.setImageDrawable(null);
+        }
+        Drawable d = image.getDrawable();
+        if (d instanceof BitmapDrawable) {
+            Bitmap b = ((BitmapDrawable) d).getBitmap();
+            if (b != null && !b.isRecycled()) b.recycle();
+        }
+        image.setImageDrawable(null);
+    }
+
+    void trimMemory(int level) {
+        if (!active && (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND
+                || level == android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL)) {
+            if (crossfadeImage != null) {
+                crossfadeImage.animate().cancel();
+                Drawable pending = crossfadeImage.getDrawable();
+                if (pending instanceof BitmapDrawable) {
+                    Bitmap b = ((BitmapDrawable) pending).getBitmap();
+                    if (b != null && !b.isRecycled()) b.recycle();
+                }
+                crossfadeImage.setImageDrawable(null);
+                crossfadeImage.setVisibility(View.GONE);
+            }
         }
     }
 
@@ -249,6 +306,10 @@ final class WallpaperPlayer {
                         if (downloaded != null && downloaded.exists()) {
                             Bitmap bmp = decode(downloaded);
                             if (bmp != null) {
+                                if (closed || !active) {
+                                    bmp.recycle();
+                                    return;
+                                }
                                 applyBitmapWithCrossfade(bmp);
                                 displayed = onlineChoice;
                                 preferences.edit().putLong("changed", System.currentTimeMillis()).apply();

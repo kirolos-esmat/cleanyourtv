@@ -759,7 +759,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
                             .translationZ(focused && advancedEffects ? 8f * density : 0f)
                             .setDuration(focused ? 120 : 80)
                             .setInterpolator(new DecelerateInterpolator())
-                            .withLayer().start();
+                            .start();
                     name.animate().alpha(focused ? 1f : restNameAlpha).setDuration(100).start();
                     // Same place as the full motion's slide ends: the layout's -6dp is only its starting point, and
                     // left there the name overlaps the zoomed tile.
@@ -771,7 +771,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
                             .translationZ(focused && advancedEffects ? 8f * density : 0f)
                             .setDuration(advancedEffects ? (focused ? 220 : 170) : (focused ? 260 : 180))
                             .setInterpolator(new OvershootInterpolator(focused ? (advancedEffects ? 0.7f : 1.6f) : 0f))
-                            .withLayer().start();
+                            .start();
                     if (advancedEffects) {
                         banner.animate().scaleX(focused ? 1.035f : 1f).scaleY(focused ? 1.035f : 1f)
                                 .setDuration(280).start();

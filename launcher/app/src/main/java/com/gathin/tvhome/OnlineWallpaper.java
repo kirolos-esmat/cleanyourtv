@@ -181,22 +181,27 @@ final class OnlineWallpaper {
         if (!cachedRedditEntries.isEmpty() && (now - cachedRedditTime < 1800000L)) {
             return cachedRedditEntries;
         }
+        HttpURLConnection conn = null;
         try {
             URL url = new URL(REDDIT_RSS_URL);
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn = (HttpURLConnection) url.openConnection();
             conn.setRequestProperty("User-Agent", "tvhome/2.5 (Android TV wallpaper)");
             conn.setConnectTimeout(8000);
             conn.setReadTimeout(8000);
             if (conn.getResponseCode() == 200) {
-                List<RedditRssParser.Entry> list = RedditRssParser.parse(conn.getInputStream());
-                if (!list.isEmpty()) {
-                    cachedRedditEntries = list;
-                    cachedRedditTime = now;
-                    return list;
+                try (InputStream in = conn.getInputStream()) {
+                    List<RedditRssParser.Entry> list = RedditRssParser.parse(in);
+                    if (!list.isEmpty()) {
+                        cachedRedditEntries = list;
+                        cachedRedditTime = now;
+                        return list;
+                    }
                 }
             }
         } catch (Exception e) {
             Log.w("TvHome.OnlineWallpaper", "Failed to fetch Reddit wallpapers: " + e.getMessage());
+        } finally {
+            if (conn != null) conn.disconnect();
         }
         return cachedRedditEntries;
     }
@@ -206,18 +211,20 @@ final class OnlineWallpaper {
         if (!cachedBingUrls.isEmpty() && (now - cachedBingTime < 3600000L)) {
             return cachedBingUrls;
         }
+        HttpURLConnection conn = null;
         try {
             URL url = new URL("https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=8&mkt=en-US");
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn = (HttpURLConnection) url.openConnection();
             conn.setRequestProperty("User-Agent", "tvhome/2.5 (Android TV)");
             conn.setConnectTimeout(8000);
             conn.setReadTimeout(8000);
             if (conn.getResponseCode() == 200) {
-                BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
                 StringBuilder sb = new StringBuilder();
-                String line;
-                while ((line = reader.readLine()) != null) sb.append(line);
-                reader.close();
+                try (InputStream in = conn.getInputStream();
+                     BufferedReader reader = new BufferedReader(new InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) sb.append(line);
+                }
                 JSONObject json = new JSONObject(sb.toString());
                 JSONArray images = json.getJSONArray("images");
                 List<String> list = new ArrayList<>();
@@ -234,7 +241,9 @@ final class OnlineWallpaper {
                 }
             }
         } catch (Exception e) {
-            Log.w("TvHome.OnlineWallpaper", "Failed to fetch Bing daily URLs: " + e.getMessage());
+            Log.w("TvHome.OnlineWallpaper", "Failed to fetch Bing wallpapers: " + e.getMessage());
+        } finally {
+            if (conn != null) conn.disconnect();
         }
         return cachedBingUrls;
     }

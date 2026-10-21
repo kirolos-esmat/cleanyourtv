@@ -48,6 +48,7 @@ import android.text.Spanned;
 import android.text.TextPaint;
 import android.text.TextUtils;
 import android.text.style.ForegroundColorSpan;
+import android.util.LruCache;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.KeyEvent;
@@ -132,7 +133,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private ImageView heroArt;
     private static final float HERO_ART_ALPHA = 0.5f;
     /** Softened artwork per app (HeroArt, about 5 KB each), made the first time its dock tile is focused. */
-    private final Map<String, Bitmap> heroArtCache = new HashMap<>();
+    private final LruCache<String, Bitmap> heroArtCache = new LruCache<String, Bitmap>(24) {
+        @Override
+        protected void entryRemoved(boolean evicted, String key, Bitmap oldValue, Bitmap newValue) {
+            if (evicted && oldValue != null && !oldValue.isRecycled()) {
+                oldValue.recycle();
+            }
+        }
+    };
     /** The app whose artwork heroArt shows, so focusing it again only fades it back in. */
     private String heroArtKey;
     /** The focus glow's colour while the cinematic shelf tints it, 0 for plain white glass. */
@@ -297,7 +305,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             updateGreeting();
             updateWeather();
             updateRace();
-            updateWifiLabel();
             sky.update();
             wallpaperPlayer.update();
             handler.postDelayed(this, MINUTE_MS);
@@ -706,6 +713,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         sky.update();
         wallpaperPlayer.start();
         resetScreensaverTimer();
+        handler.removeCallbacks(minuteTick);
         handler.postDelayed(minuteTick, MINUTE_MS);
         if (festive && diya != null) {
             diya.start();
@@ -774,7 +782,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         final int returnSlot = lastFocused;
         final List<Cards.Card> none = Collections.emptyList();
         // An updated app may bring new artwork; the backdrop is cheap to make again.
-        heroArtCache.clear();
+        heroArtCache.evictAll();
         heroArtKey = null;
         // One LEANBACK query for both the tiles and the card checks.
         final List<ResolveInfo> leanback = getPackageManager().queryIntentActivities(
@@ -866,7 +874,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // they hold) would stay attached until Home comes back. setAdapter(null) recycles them now.
         grid.setAdapter(null);
         grid.getRecycledViewPool().clear();
-        heroArtCache.clear();
+        heroArtCache.evictAll();
+        WallpaperThumbnailLoader.evictAll();
+        if (wallpaperPlayer != null) wallpaperPlayer.trimMemory(level);
         heroArtKey = null;
         rebuildOnResume = true;
     }
@@ -2101,15 +2111,28 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         else if (hour < 22) res = R.string.good_evening;
         else res = R.string.good_night;
         String festiveGreeting = festive ? festival.greetingText() : "";
+        String targetText;
+        int targetColor;
         if (!festiveGreeting.isEmpty()) {
-            greeting.setText(festiveGreeting);
-            greeting.setTextColor(liftTowardsWhite(festival.accentColor(), 0.25f));
+            targetText = festiveGreeting;
+            targetColor = liftTowardsWhite(festival.accentColor(), 0.25f);
         } else {
-            greeting.setText(greetingName.isEmpty() ? getString(res)
-                    : getString(R.string.greeting_with_name, getString(res), greetingName));
-            greeting.setTextColor(greetingColor);
+            targetText = greetingName.isEmpty() ? getString(res)
+                    : getString(R.string.greeting_with_name, getString(res), greetingName);
+            targetColor = greetingColor;
         }
-        if (shamsi) shamsiDate.setText(Shamsi.today());
+        if (!TextUtils.equals(greeting.getText(), targetText)) {
+            greeting.setText(targetText);
+        }
+        if (greeting.getCurrentTextColor() != targetColor) {
+            greeting.setTextColor(targetColor);
+        }
+        if (shamsi) {
+            String today = Shamsi.today();
+            if (!TextUtils.equals(shamsiDate.getText(), today)) {
+                shamsiDate.setText(today);
+            }
+        }
     }
 
     /** Weather line above the date; the cached reading shows at once, a fresh one every 30 minutes. */
@@ -2117,13 +2140,19 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (weather == null || config == null || !config.showWeather) return;
         Weather.refresh(this, config, handler, text -> {
             if (isDestroyed()) return;
+            if (TextUtils.equals(weather.getText(), text) && weather.getVisibility() == View.VISIBLE) {
+                return;
+            }
             weather.setText(text);
             weather.setVisibility(View.VISIBLE);
             View divider = findViewById(R.id.clockDivider);
             if (divider != null) {
                 ViewGroup.LayoutParams lp = divider.getLayoutParams();
-                lp.height = (int) (38 * density);
-                divider.setLayoutParams(lp);
+                int targetHeight = (int) (38 * density);
+                if (lp.height != targetHeight) {
+                    lp.height = targetHeight;
+                    divider.setLayoutParams(lp);
+                }
             }
         });
     }
