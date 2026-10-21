@@ -39,7 +39,6 @@ AIRPLAY_SCHEDULED_RELEASE="${AIRPLAY_SCHEDULED_RELEASE:-false}"
 AIRPLAY_AUDIO_AUTO_BUFFER="${AIRPLAY_AUDIO_AUTO_BUFFER:-true}"
 AIRPLAY_AUDIO_CUSHION_MS="${AIRPLAY_AUDIO_CUSHION_MS:-40}"
 AIRPLAY_AUDIO_LATENCY_MS="${AIRPLAY_AUDIO_LATENCY_MS:--1}"
-AIRPLAY_FORCE_SW_AAC="${AIRPLAY_FORCE_SW_AAC:-false}"
 
 TOOLS_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 AIRPLAY_DIR="$TOOLS_DIR/airplay"
@@ -58,7 +57,8 @@ set_setting() {
     if echo "$output" | grep -q 'result=-1'; then
         echo "   [ok] $key=$value"
     else
-        echo "   [warn] failed to set $key=$value ($output)" >&2
+        echo "   [error] failed to set $key=$value ($output)" >&2
+        exit 1
     fi
 }
 
@@ -68,12 +68,18 @@ verify_receiver_settings() {
     list_output=$(adb -s "$TV_TARGET" shell am broadcast \
         -n "$RECEIVER_COMPONENT" \
         -a "$PKG_NAME.LIST_SETTINGS" 2>&1) || true
+
+    if ! echo "$list_output" | grep -q 'result=-1'; then
+        echo "   [error] Failed to query receiver settings from $TV_TARGET ($list_output)" >&2
+        exit 1
+    fi
+
     local json_data
     json_data=$(echo "$list_output" | sed -n 's/.*data="\(.*\)".*/\1/p')
 
     if [ -z "$json_data" ]; then
-        echo "   [warn] Could not read settings list from receiver." >&2
-        return 0
+        echo "   [error] Receiver returned empty settings payload ($list_output)" >&2
+        exit 1
     fi
 
     if command -v python3 >/dev/null 2>&1; then
@@ -81,6 +87,9 @@ verify_receiver_settings() {
 import json, sys
 try:
     data = json.load(sys.stdin)
+    if not isinstance(data, dict) or not data:
+        print("   [error] Invalid JSON structure received from receiver.", file=sys.stderr)
+        sys.exit(1)
     watched = [
         ("server_name", "Device Name"),
         ("low_latency", "Low Latency Pipeline"),
@@ -88,7 +97,6 @@ try:
         ("audio_auto_buffer", "Adaptive Audio Cushion"),
         ("audio_cushion_ms", "Fixed Cushion (ms)"),
         ("audio_latency_ms", "Sender Audio Latency (ms)"),
-        ("force_sw_aac", "Force Software AAC"),
     ]
     print("---------------------------------------------------------")
     print(f"{chr(32)*3}{chr(35)} Active Receiver Configuration:")
@@ -100,10 +108,14 @@ try:
         print(f"   - {label} ({key}): {val}{custom_note}")
     print("---------------------------------------------------------")
 except Exception as e:
-    print("Raw settings:", file=sys.stderr)
-    print(sys.stdin.read(), file=sys.stderr)
-'
+    print(f"   [error] Failed to parse receiver settings JSON: {e}", file=sys.stderr)
+    sys.exit(1)
+' || exit 1
     else
+        if ! printf '%s' "$json_data" | grep -q '^{'; then
+            echo "   [error] Invalid settings JSON data: $json_data" >&2
+            exit 1
+        fi
         echo "Active settings JSON: $json_data"
     fi
 }
@@ -150,7 +162,6 @@ set_setting "scheduled_output_buffer_release" "$AIRPLAY_SCHEDULED_RELEASE"
 set_setting "audio_auto_buffer" "$AIRPLAY_AUDIO_AUTO_BUFFER"
 set_setting "audio_cushion_ms" "$AIRPLAY_AUDIO_CUSHION_MS"
 set_setting "audio_latency_ms" "$AIRPLAY_AUDIO_LATENCY_MS"
-set_setting "force_sw_aac" "$AIRPLAY_FORCE_SW_AAC"
 
 echo "==> Restarting server process to ensure all preferences take effect..."
 adb -s "$TV_TARGET" shell am force-stop "$PKG_NAME" || true

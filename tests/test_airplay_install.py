@@ -58,7 +58,7 @@ class AirPlayInstallTest(unittest.TestCase):
 echo "$@" >> "{log_file}"
 if echo "$@" | grep -q "LIST_SETTINGS"; then
     echo 'Broadcasting: Intent {{ act=io.github.jqssun.airplay.LIST_SETTINGS }}'
-    echo 'Broadcast completed: result=-1, data="{{"server_name":{{"value":"Test TV","default":"Android AirPlay"}},"low_latency":{{"value":true,"default":false}},"scheduled_output_buffer_release":{{"value":false,"default":false}},"audio_auto_buffer":{{"value":true,"default":true}},"audio_cushion_ms":{{"value":40,"default":40}},"audio_latency_ms":{{"value":-1,"default":-1}},"force_sw_aac":{{"value":false,"default":false}}}}"'
+    echo 'Broadcast completed: result=-1, data="{{"server_name":{{"value":"Test TV","default":"Android AirPlay"}},"low_latency":{{"value":true,"default":false}},"scheduled_output_buffer_release":{{"value":false,"default":false}},"audio_auto_buffer":{{"value":true,"default":true}},"audio_cushion_ms":{{"value":40,"default":40}},"audio_latency_ms":{{"value":-1,"default":-1}}}}"'
     exit 0
 fi
 if echo "$@" | grep -q "SET_SETTING"; then
@@ -79,7 +79,6 @@ exit 0
             test_env["AIRPLAY_AUDIO_AUTO_BUFFER"] = "true"
             test_env["AIRPLAY_AUDIO_CUSHION_MS"] = "40"
             test_env["AIRPLAY_AUDIO_LATENCY_MS"] = "-1"
-            test_env["AIRPLAY_FORCE_SW_AAC"] = "false"
 
             result = subprocess.run(
                 [str(INSTALL_SCRIPT)],
@@ -100,7 +99,7 @@ exit 0
             self.assertIn("key 'audio_auto_buffer' --es value 'true'", logged_calls)
             self.assertIn("key 'audio_cushion_ms' --es value '40'", logged_calls)
             self.assertIn("key 'audio_latency_ms' --es value '-1'", logged_calls)
-            self.assertIn("key 'force_sw_aac' --es value 'false'", logged_calls)
+            self.assertNotIn("force_sw_aac", logged_calls)
             self.assertIn("LIST_SETTINGS", logged_calls)
             self.assertIn("am force-stop io.github.jqssun.airplay", logged_calls)
 
@@ -141,6 +140,127 @@ exit 0
             # Must NOT reinstall or configure in verify mode
             self.assertNotIn("install -r", logged_calls)
             self.assertNotIn("SET_SETTING", logged_calls)
+
+    def test_setting_broadcast_failure_exits_nonzero(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            bin_dir = tmp_path / "bin"
+            bin_dir.mkdir()
+            mock_adb = bin_dir / "adb"
+
+            # SET_SETTING fails with result=0
+            mock_adb.write_text("""#!/bin/sh
+if echo "$@" | grep -q "SET_SETTING"; then
+    echo 'Broadcasting: Intent { act=io.github.jqssun.airplay.SET_SETTING }'
+    echo 'Broadcast completed: result=0'
+    exit 0
+fi
+exit 0
+""")
+            mock_adb.chmod(0o755)
+
+            test_env = os.environ.copy()
+            test_env["PATH"] = f"{bin_dir}:{test_env.get('PATH', '')}"
+            test_env["TV_HOST"] = "192.0.2.3"
+
+            result = subprocess.run(
+                [str(INSTALL_SCRIPT)],
+                capture_output=True,
+                text=True,
+                env=test_env
+            )
+            self.assertNotEqual(result.returncode, 0, "Installer must exit non-zero when a setting broadcast fails")
+            self.assertIn("failed to set", result.stderr)
+
+    def test_verify_failed_broadcast_exits_nonzero(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            bin_dir = tmp_path / "bin"
+            bin_dir.mkdir()
+            mock_adb = bin_dir / "adb"
+
+            # LIST_SETTINGS fails
+            mock_adb.write_text("""#!/bin/sh
+if echo "$@" | grep -q "LIST_SETTINGS"; then
+    echo 'Broadcasting: Intent { act=io.github.jqssun.airplay.LIST_SETTINGS }'
+    echo 'Broadcast completed: result=0, data=""'
+    exit 0
+fi
+exit 0
+""")
+            mock_adb.chmod(0o755)
+
+            test_env = os.environ.copy()
+            test_env["PATH"] = f"{bin_dir}:{test_env.get('PATH', '')}"
+
+            result = subprocess.run(
+                [str(INSTALL_SCRIPT), "--verify", "192.0.2.4"],
+                capture_output=True,
+                text=True,
+                env=test_env
+            )
+            self.assertNotEqual(result.returncode, 0, "--verify must exit non-zero when broadcast query fails")
+            self.assertIn("Failed to query receiver settings", result.stderr)
+
+    def test_verify_invalid_json_exits_nonzero(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            bin_dir = tmp_path / "bin"
+            bin_dir.mkdir()
+            mock_adb = bin_dir / "adb"
+
+            # LIST_SETTINGS returns invalid JSON
+            mock_adb.write_text("""#!/bin/sh
+if echo "$@" | grep -q "LIST_SETTINGS"; then
+    echo 'Broadcasting: Intent { act=io.github.jqssun.airplay.LIST_SETTINGS }'
+    echo 'Broadcast completed: result=-1, data="{corrupted_json: true"'
+    exit 0
+fi
+exit 0
+""")
+            mock_adb.chmod(0o755)
+
+            test_env = os.environ.copy()
+            test_env["PATH"] = f"{bin_dir}:{test_env.get('PATH', '')}"
+
+            result = subprocess.run(
+                [str(INSTALL_SCRIPT), "--verify", "192.0.2.5"],
+                capture_output=True,
+                text=True,
+                env=test_env
+            )
+            self.assertNotEqual(result.returncode, 0, "--verify must exit non-zero when JSON payload is invalid")
+            self.assertIn("Failed to parse receiver settings JSON", result.stderr)
+
+    def test_verify_empty_data_exits_nonzero(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            bin_dir = tmp_path / "bin"
+            bin_dir.mkdir()
+            mock_adb = bin_dir / "adb"
+
+            # LIST_SETTINGS returns empty data payload
+            mock_adb.write_text("""#!/bin/sh
+if echo "$@" | grep -q "LIST_SETTINGS"; then
+    echo 'Broadcasting: Intent { act=io.github.jqssun.airplay.LIST_SETTINGS }'
+    echo 'Broadcast completed: result=-1'
+    exit 0
+fi
+exit 0
+""")
+            mock_adb.chmod(0o755)
+
+            test_env = os.environ.copy()
+            test_env["PATH"] = f"{bin_dir}:{test_env.get('PATH', '')}"
+
+            result = subprocess.run(
+                [str(INSTALL_SCRIPT), "--verify", "192.0.2.6"],
+                capture_output=True,
+                text=True,
+                env=test_env
+            )
+            self.assertNotEqual(result.returncode, 0, "--verify must exit non-zero when data payload is empty")
+            self.assertIn("Receiver returned empty settings payload", result.stderr)
 
 
 if __name__ == "__main__":

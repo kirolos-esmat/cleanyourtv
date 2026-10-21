@@ -49,7 +49,6 @@ All tuning options can be customized via environment variables:
 | `AIRPLAY_AUDIO_AUTO_BUFFER` | `true` | `true`, `false` | Dynamically adapts audio cushion to network jitter. |
 | `AIRPLAY_AUDIO_CUSHION_MS` | `40` | `1`..`1000` | Fixed audio cushion (ms) used when auto-buffering is disabled. |
 | `AIRPLAY_AUDIO_LATENCY_MS` | `-1` | `-1`..`1000` | Audio latency offset reported to Apple sender (`-1` = unconfigured upstream standard). |
-| `AIRPLAY_FORCE_SW_AAC` | `false` | `true`, `false` | Forces FFmpeg software AAC decoder instead of Google C2/MediaCodec. |
 
 ### Example Custom Tuning:
 ```bash
