@@ -75,6 +75,7 @@ public class HomeKeyService extends AccessibilityService {
         AccessibilityServiceInfo info = getServiceInfo();
         if (info != null) {
             info.flags |= AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS;
+            info.eventTypes |= AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED;
             setServiceInfo(info);
         }
         settingsScancodes = getResources().getIntArray(R.array.settings_key_scancodes);
@@ -144,15 +145,15 @@ public class HomeKeyService extends AccessibilityService {
     }
 
     private void openDashboard() {
-        if (performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)) {
-            return;
-        }
         Intent dash = new Intent("android.app.action.OPEN_NOTIFICATION_HANDLER_PANEL")
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         try {
             startActivity(dash);
             return;
         } catch (Exception ignored) {
+        }
+        if (performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)) {
+            return;
         }
         try {
             startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
