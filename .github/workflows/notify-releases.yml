@@ -116,4 +116,4 @@ jobs:
           gh issue create \
             --repo kirolos-esmat/cleanyourtv \
             --title "🚀 New Upstream Release: $TAG is ready to update on your TV!" \
-            --body-file issue_body.md
+            --body-file issue_body.md || true
