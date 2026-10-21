@@ -46,11 +46,21 @@ final class WallpaperThumbnailLoader {
         final Context appCtx = context.getApplicationContext();
 
         executor.execute(() -> {
+            String resolved = source;
+            if (OnlineWallpaper.CHOICE_BING.equals(source)) {
+                resolved = OnlineWallpaper.resolveUrl(OnlineWallpaper.CHOICE_BING);
+            } else if (OnlineWallpaper.CHOICE_REDDIT.equals(source)) {
+                java.util.List<RedditRssParser.Entry> entries = OnlineWallpaper.fetchRedditWallpapers();
+                if (!entries.isEmpty()) {
+                    resolved = entries.get(0).imageUrl;
+                }
+            }
+
             Bitmap bmp = null;
-            if (source.startsWith("http://") || source.startsWith("https://")) {
-                bmp = loadFromHttp(appCtx, source);
-            } else {
-                File file = new File(source);
+            if (resolved != null && (resolved.startsWith("http://") || resolved.startsWith("https://"))) {
+                bmp = loadFromHttp(appCtx, resolved);
+            } else if (resolved != null) {
+                File file = new File(resolved);
                 if (file.exists() && file.isFile()) {
                     bmp = decodeSampled(file.getAbsolutePath());
                 }

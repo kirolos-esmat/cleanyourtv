@@ -168,7 +168,7 @@ public final class LauncherSettingsActivity extends Activity {
                 OnlineWallpaper.CHOICE_BING,
                 "Daily Bing",
                 "Microsoft Bing",
-                OnlineWallpaper.resolveUrl(OnlineWallpaper.CHOICE_BING)
+                OnlineWallpaper.CHOICE_BING
         ));
 
         // 3. Curated Unsplash Photos

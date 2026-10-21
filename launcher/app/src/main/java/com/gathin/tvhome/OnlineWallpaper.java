@@ -31,6 +31,8 @@ final class OnlineWallpaper {
     private static final String REDDIT_RSS_URL = "https://www.reddit.com/r/wallpapers/hot.rss?limit=25";
     private static volatile java.util.List<RedditRssParser.Entry> cachedRedditEntries = new java.util.ArrayList<>();
     private static volatile int currentRedditIndex = 0;
+    private static volatile String cachedBingUrl = null;
+    private static volatile long cachedBingTime = 0;
 
     static final String URL_NATURE = "https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=1920&q=80";
     static final String URL_AURORA = "https://images.unsplash.com/photo-1531366936337-7c912a4589a7?w=1920&q=80";
@@ -98,9 +100,14 @@ final class OnlineWallpaper {
     }
 
     private static String fetchBingDailyUrl() {
+        long now = System.currentTimeMillis();
+        if (cachedBingUrl != null && (now - cachedBingTime < 3600000L)) {
+            return cachedBingUrl;
+        }
         try {
             URL url = new URL("https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=1&mkt=en-US");
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestProperty("User-Agent", "tvhome/2.5 (Android TV)");
             conn.setConnectTimeout(8000);
             conn.setReadTimeout(8000);
             if (conn.getResponseCode() == 200) {
@@ -113,13 +120,16 @@ final class OnlineWallpaper {
                 JSONArray images = json.getJSONArray("images");
                 if (images.length() > 0) {
                     String imgUrl = images.getJSONObject(0).getString("url");
-                    return "https://www.bing.com" + imgUrl;
+                    String fullUrl = "https://www.bing.com" + imgUrl;
+                    cachedBingUrl = fullUrl;
+                    cachedBingTime = now;
+                    return fullUrl;
                 }
             }
         } catch (Exception e) {
             Log.w("TvHome.OnlineWallpaper", "Failed to fetch Bing daily URL: " + e.getMessage());
         }
-        return URL_NATURE;
+        return cachedBingUrl != null ? cachedBingUrl : URL_NATURE;
     }
 
     static File getCacheFile(Context ctx) {
