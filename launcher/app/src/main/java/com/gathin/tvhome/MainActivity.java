@@ -439,17 +439,17 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             public void onChildViewDetachedFromWindow(@NonNull View v) {
             }
         });
-        if (dockRow) grid.addItemDecoration(new DockDecoration(COLUMNS, density, cinematic, cfg.alwaysShowNames));
+        adapter = new AppAdapter(this, this, COLUMNS, cfg);
+        dockApps = cfg.dockApps;
+        fillDockLeavesSlots = !cfg.fillDock;
+        adapter.setSavedOrder(Order.ranks(Order.load(Order.file(this)), dockApps));
+        if (dockRow) grid.addItemDecoration(new DockDecoration(COLUMNS, density, cinematic, cfg.alwaysShowNames, adapter, advancedEffects));
         if (animations) {
             int enterAnim = reducedMotion ? R.anim.tile_enter_reduced : R.anim.tile_enter;
             float enterDelay = reducedMotion ? 0f : 0.06f;
             grid.setLayoutAnimation(new LayoutAnimationController(
                     AnimationUtils.loadAnimation(this, enterAnim), enterDelay));
         }
-        adapter = new AppAdapter(this, this, COLUMNS, cfg);
-        dockApps = cfg.dockApps;
-        fillDockLeavesSlots = !cfg.fillDock;
-        adapter.setSavedOrder(Order.ranks(Order.load(Order.file(this)), dockApps));
         grid.setAdapter(adapter);
 
         // tvOS layout: push the dock row towards the bottom of the screen, leaving room for
@@ -1354,7 +1354,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         Rect r = tileRect;
         r.set(0, 0, card.getWidth(), card.getHeight());
         root.offsetDescendantRectToMyCoords(card, r);
-        float pad = 6f * density;        // matches GlassView's glow inset
+        float pad = GlassView.INSET_DP * density;        // matches GlassView's glow/shadow inset
         float scale = adapter.focusScale();
         float w = card.getWidth() * scale + 2 * pad;
         float h = card.getHeight() * scale + 2 * pad;
@@ -1425,7 +1425,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         RecyclerView.ViewHolder vh = grid.findViewHolderForAdapterPosition(pos);
         View card = vh == null ? null : vh.itemView.findViewById(R.id.card);
         if (card == null || card.getWidth() <= 0 || !card.isFocused()) return;
-        float pad = 6f * density;
+        float pad = GlassView.INSET_DP * density;
         float scale = adapter.focusScale();
         int w = (int) (card.getWidth() * scale + 2 * pad);
         int h = (int) (card.getHeight() * scale + 2 * pad);
