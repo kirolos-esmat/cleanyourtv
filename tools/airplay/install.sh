@@ -43,17 +43,40 @@ adb -s "$TV_HOST:5555" install -r "$CACHE_APK"
 echo "==> Configuring background permissions and autostart..."
 # Whitelist battery optimizations so background receiver does not get killed
 adb -s "$TV_HOST:5555" shell "dumpsys deviceidle whitelist +$PKG_NAME" || true
+# Grant overlay permission so video mirroring opens automatically over launcher
+adb -s "$TV_HOST:5555" shell "appops set $PKG_NAME SYSTEM_ALERT_WINDOW allow" || true
 
 # Start service/app
 echo "==> Launching AirPlay receiver..."
 adb -s "$TV_HOST:5555" shell "monkey -p $PKG_NAME -c android.intent.category.LAUNCHER 1" || true
 
-echo "==> Setting AirPlay device name to '$DEVICE_NAME'..."
+echo "==> Configuring A/V synchronization and device name..."
 adb -s "$TV_HOST:5555" shell am broadcast \
     -n "$PKG_NAME/.SettingsReceiver" \
     -a "$PKG_NAME.SET_SETTING" \
     --es key server_name \
     --es value "$DEVICE_NAME" || true
+
+# Enable presentation timestamp scheduling so video doesn't rush ahead of audio
+adb -s "$TV_HOST:5555" shell am broadcast \
+    -n "$PKG_NAME/.SettingsReceiver" \
+    -a "$PKG_NAME.SET_SETTING" \
+    --es key scheduled_output_buffer_release \
+    --es value "true" || true
+
+# Enable low latency Oboe audio decoding pipeline
+adb -s "$TV_HOST:5555" shell am broadcast \
+    -n "$PKG_NAME/.SettingsReceiver" \
+    -a "$PKG_NAME.SET_SETTING" \
+    --es key low_latency \
+    --es value "true" || true
+
+# Compensate audio delay (250ms) to ensure lipsync
+adb -s "$TV_HOST:5555" shell am broadcast \
+    -n "$PKG_NAME/.SettingsReceiver" \
+    -a "$PKG_NAME.SET_SETTING" \
+    --es key audio_latency_ms \
+    --es value "250" || true
 
 echo "==> Done! Your TV should now appear in the AirPlay / Screen Mirroring menu on your iPhone/iPad/Mac."
 echo "Note: DRM-protected content (Netflix, Disney+) cannot be mirrored due to Apple FairPlay encryption."
