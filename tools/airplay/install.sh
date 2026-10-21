@@ -45,6 +45,8 @@ echo "==> Configuring background permissions and autostart..."
 adb -s "$TV_HOST:5555" shell "dumpsys deviceidle whitelist +$PKG_NAME" || true
 # Grant overlay permission so video mirroring opens automatically over launcher
 adb -s "$TV_HOST:5555" shell "appops set $PKG_NAME SYSTEM_ALERT_WINDOW allow" || true
+# Enable dark theme mode for the system and apps
+adb -s "$TV_HOST:5555" shell "cmd uimode night yes; settings put secure ui_night_mode 2" || true
 
 # Start service/app
 echo "==> Launching AirPlay receiver..."
