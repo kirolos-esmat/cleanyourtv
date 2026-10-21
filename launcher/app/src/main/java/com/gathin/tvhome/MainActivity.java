@@ -2802,6 +2802,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         return "Trim";
     }
 
+    @android.annotation.SuppressLint("MissingPermission")
     private void trimMemoryNow() {
         try {
             android.app.ActivityManager am = (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);

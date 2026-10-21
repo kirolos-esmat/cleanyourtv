@@ -1,0 +1,111 @@
+name: Upstream Release Notifier & Auto-Builder
+
+on:
+  schedule:
+    - cron: '0 */4 * * *' # Check every 4 hours
+  workflow_dispatch:     # Allows manual trigger anytime from Actions tab
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  check-releases:
+    name: Check Upstream Releases & Build APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for new upstream release
+        id: check_release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          LATEST_TAG=$(gh release view --repo Gathin23/cleanyourtv --json tagName -q .tagName 2>/dev/null || echo "")
+          echo "Latest upstream release tag: $LATEST_TAG"
+          if [ -z "$LATEST_TAG" ]; then
+            echo "No upstream release found."
+            echo "has_new=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          if gh release view "$LATEST_TAG" --repo kirolos-esmat/cleanyourtv >/dev/null 2>&1; then
+            echo "Release $LATEST_TAG is already processed."
+            echo "has_new=false" >> $GITHUB_OUTPUT
+          else
+            echo "New release detected: $LATEST_TAG"
+            echo "has_new=true" >> $GITHUB_OUTPUT
+            echo "tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up Java 17
+        if: steps.check_release.outputs.has_new == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        if: steps.check_release.outputs.has_new == 'true'
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-34 build-tools;34.0.0'
+
+      - name: Set up Gradle
+        if: steps.check_release.outputs.has_new == 'true'
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build custom release APK
+        if: steps.check_release.outputs.has_new == 'true'
+        working-directory: launcher
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease
+
+      - name: Publish GitHub Release with custom APK
+        if: steps.check_release.outputs.has_new == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.check_release.outputs.tag }}
+        run: |
+          APK_PATH="launcher/app/build/outputs/apk/release/app-release.apk"
+          gh release create "$TAG" "$APK_PATH#CleanYourTV-$TAG.apk" \
+            --repo kirolos-esmat/cleanyourtv \
+            --title "CleanYourTV $TAG (Custom Fork Build)" \
+            --notes "Automated build for upstream release **$TAG** with all custom features included:
+- ⛅ Live Weather Widget (Open-Meteo)
+- 🎛️ Quick Control Center (Standby, RAM cleaner, storage cleaner)
+- 🖼️ Dynamic 32-bit true color online wallpapers (Reddit RSS / Unsplash)
+- 🔀 Remote interactive tile reordering & HomeKeyService
+- 📺 Custom IPTV & streaming inputs menu"
+
+      - name: Send Notification via GitHub Issue
+        if: steps.check_release.outputs.has_new == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.check_release.outputs.tag }}
+        run: |
+          gh issue create \
+            --repo kirolos-esmat/cleanyourtv \
+            --title "🚀 New Upstream Release: $TAG is ready to update on your TV!" \
+            --body "A new upstream release **$TAG** was published by Gathin23/cleanyourtv.
+
+Your fork has automatically compiled a customized APK with all your TV features preserved.
+
+### 📦 Download the Built APK:
+You can download the APK directly from your releases:
+👉 [Download CleanYourTV-$TAG.apk](https://github.com/kirolos-esmat/cleanyourtv/releases/tag/$TAG)
+
+### 📺 Update your TV directly:
+From your computer terminal connected to your TV:
+\`\`\`bash
+TV_HOST=192.168.1.126 ./launcher/build-and-install.sh
+# or install the built apk:
+adb install -r launcher/app/build/outputs/apk/release/app-release.apk
+\`\`\`
+
+*Close this issue once you have updated your TV.*"
