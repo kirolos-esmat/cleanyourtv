@@ -23,7 +23,6 @@
         <item>nextapp.fx</item>
         <item>com.cybercat.adbappcontrol.tv</item>
         <item>org.localsend.localsend_app</item>
-        <item>flar2.homebutton</item>
         <item>com.ionitech.airscreen</item>
         <item>com.phlox.tvwebbrowser</item>
         <item>com.esaba.downloader</item>
@@ -116,6 +115,10 @@
          it back. The KTC LUMIO VISION remote (Realtek Google TV) sends Netflix 191, YouTube 190, Prime Video 195
          and TL;DR 200. A listed app that is not installed leaves the button doing nothing. Leave empty to omit. -->
     <string-array name="app_keys" translatable="false">
+        <item>190:org.smarttube.stable</item>
+        <item>192:com.plexapp.android|com.nostalgiatv.nostalgia_tv</item>
+        <item>193:com.nst.iptvsmarterstvbox</item>
+        <item>194:com.spotify.tv.android|com.anghami</item>
     </string-array>
 
     <!-- Show the Solar Hijri (Shamsi) date used in Iran and Afghanistan, e.g. "27 Mehr 1405", above the

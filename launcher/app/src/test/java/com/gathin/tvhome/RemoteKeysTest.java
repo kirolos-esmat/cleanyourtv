@@ -12,6 +12,11 @@ public class RemoteKeysTest {
                 name -> name.equals("KEYCODE_BUTTON_3") ? 190 : 0);
     }
 
+    private static Map<Integer, String> parseDouble(String... entries) {
+        return RemoteKeys.parseDoubleTapAppKeys(java.util.Arrays.asList(entries),
+                name -> name.equals("KEYCODE_BUTTON_3") ? 190 : 0);
+    }
+
     @Test public void keyNamesWorkLikeNumbers() {
         Map<Integer, String> keys = parse("KEYCODE_BUTTON_3:com.google.android.youtube.tv", "KEYCODE_NOT_A_KEY:a.b");
         assertEquals(1, keys.size());
@@ -35,5 +40,19 @@ public class RemoteKeysTest {
     @Test public void theLastEntryForAKeycodeWins() {
         Map<Integer, String> keys = parse("190:a.b", "190:c.d");
         assertEquals("c.d", keys.get(190));
+    }
+
+    @Test public void singleAndDoubleTapKeysWithPipe() {
+        Map<Integer, String> single = parse("192:com.plexapp.android|com.nostalgiatv.nostalgia_tv");
+        Map<Integer, String> dbl = parseDouble("192:com.plexapp.android|com.nostalgiatv.nostalgia_tv");
+        assertEquals("com.plexapp.android", single.get(192));
+        assertEquals("com.nostalgiatv.nostalgia_tv", dbl.get(192));
+    }
+
+    @Test public void explicitDoublePrefix() {
+        Map<Integer, String> single = parse("double:192:com.nostalgiatv.nostalgia_tv");
+        Map<Integer, String> dbl = parseDouble("double:192:com.nostalgiatv.nostalgia_tv");
+        assertTrue(single.isEmpty());
+        assertEquals("com.nostalgiatv.nostalgia_tv", dbl.get(192));
     }
 }

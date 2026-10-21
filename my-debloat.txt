@@ -21,4 +21,7 @@ com.google.android.videos
 com.google.android.play.games
 com.android.printspooler
 
+# Key remapper replaced by built-in HomeKeyService
+flar2.homebutton
+
 

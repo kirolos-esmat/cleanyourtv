@@ -14,29 +14,42 @@ import java.util.Map;
 
 /**
  * Sends the remote's Home button to this launcher on remotes that emit KEYCODE_HOME or KEYCODE_ALL_APPS,
- * and opens the Google TV quick-settings dashboard panel on a long press of the Home button.
- * Also handles the Apps button (KEYCODE_ALL_APPS):
- * - Click while on launcher: does nothing (no glitch, no stock apps flashing).
- * - Click while in another app: returns to launcher.
- * - Long press: opens Google Play Store directly.
+ * and opens the Google TV quick-settings dashboard panel on a long press of the Home button (or double tap).
+ * Also handles the Apps button (KEYCODE_ALL_APPS) and remapped remote app keys (with single/double tap).
+ * - Home single tap: returns to launcher.
+ * - Home double tap: opens Settings / Quick Settings.
+ * - Home long press: opens Dashboard panel.
+ * - Apps click: returns to launcher from other apps, does nothing while on launcher.
+ * - Apps long press: opens Google Play Store directly.
  */
 public class HomeKeyService extends AccessibilityService {
 
+    private static final long DOUBLE_TAP_MS = 300L;
     private static final long LONG_PRESS_MS = 400L;
 
     /** Remote buttons that should open Settings (config.xml, settings_key_scancodes and settings_key_keycodes). */
     private int[] settingsScancodes = new int[0];
     private int[] settingsKeycodes = new int[0];
     private boolean settingsPanel;
-    /** app_keys, the same map InputKeyService reads, for setups that run only this service. */
+    /** app_keys, single tap mapping (keycode -> package). */
     private Map<Integer, String> appKeys = Collections.emptyMap();
+    /** app_keys, double tap mapping (keycode -> package). */
+    private Map<Integer, String> appDoubleKeys = Collections.emptyMap();
 
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private int pendingDoubleTapKey;
+    private Runnable pendingSingleTapRunnable;
+
     private boolean homeDown;
     private boolean homeLongHandled;
     private final Runnable homeLongPressRunnable = () -> {
         if (homeDown && !homeLongHandled) {
             homeLongHandled = true;
+            if (pendingSingleTapRunnable != null) {
+                handler.removeCallbacks(pendingSingleTapRunnable);
+                pendingDoubleTapKey = 0;
+                pendingSingleTapRunnable = null;
+            }
             openDashboard();
         }
     };
@@ -65,6 +78,7 @@ public class HomeKeyService extends AccessibilityService {
         settingsKeycodes = config.settingsKeycodes;
         settingsPanel = config.settingsKeyPanel;
         appKeys = RemoteKeys.parseAppKeys(config.appKeys);
+        appDoubleKeys = RemoteKeys.parseDoubleTapAppKeys(config.appKeys);
     }
 
     private boolean isSettingsKey(KeyEvent event) {
@@ -83,6 +97,18 @@ public class HomeKeyService extends AccessibilityService {
             startActivity(home);
         } catch (Exception ignored) {
         }
+    }
+
+    private void openSettings() {
+        if (settingsPanel) {
+            try {
+                startActivity(new Intent(this, QuickSettingsActivity.class)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                return;
+            } catch (Exception ignored) {
+            }
+        }
+        openDashboard();
     }
 
     private void openPlayStore() {
@@ -120,22 +146,57 @@ public class HomeKeyService extends AccessibilityService {
     protected boolean onKeyEvent(KeyEvent event) {
         if (isSettingsKey(event)) {
             if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) {
-                if (settingsPanel) {
-                    startActivity(new Intent(this, QuickSettingsActivity.class)
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-                } else {
-                    openDashboard();
-                }
+                openSettings();
             }
-            return true;
-        }
-        String app = appKeys.get(event.getKeyCode());
-        if (app != null) {
-            if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) RemoteKeys.launch(this, app);
             return true;
         }
 
         int code = event.getKeyCode();
+        String singleApp = appKeys.get(code);
+        String doubleApp = appDoubleKeys.get(code);
+
+        if (singleApp != null || doubleApp != null) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                return true;
+            }
+            if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) {
+                if (doubleApp != null) {
+                    if (pendingDoubleTapKey == code) {
+                        // Double tap!
+                        if (pendingSingleTapRunnable != null) {
+                            handler.removeCallbacks(pendingSingleTapRunnable);
+                            pendingSingleTapRunnable = null;
+                        }
+                        pendingDoubleTapKey = 0;
+                        RemoteKeys.launch(this, doubleApp);
+                    } else {
+                        // First tap
+                        if (pendingSingleTapRunnable != null) {
+                            handler.removeCallbacks(pendingSingleTapRunnable);
+                            pendingSingleTapRunnable = null;
+                        }
+                        pendingDoubleTapKey = code;
+                        pendingSingleTapRunnable = () -> {
+                            pendingDoubleTapKey = 0;
+                            pendingSingleTapRunnable = null;
+                            if (singleApp != null) {
+                                RemoteKeys.launch(this, singleApp);
+                            }
+                        };
+                        handler.postDelayed(pendingSingleTapRunnable, DOUBLE_TAP_MS);
+                    }
+                } else if (singleApp != null) {
+                    // No double tap configured for this key: execute immediately
+                    if (pendingSingleTapRunnable != null) {
+                        handler.removeCallbacks(pendingSingleTapRunnable);
+                        pendingSingleTapRunnable = null;
+                        pendingDoubleTapKey = 0;
+                    }
+                    RemoteKeys.launch(this, singleApp);
+                }
+            }
+            return true;
+        }
 
         // Apps button (KEYCODE_ALL_APPS):
         if (code == KeyEvent.KEYCODE_ALL_APPS) {
@@ -179,17 +240,43 @@ public class HomeKeyService extends AccessibilityService {
                 } else if (!homeLongHandled) {
                     homeLongHandled = true;
                     handler.removeCallbacks(homeLongPressRunnable);
+                    if (pendingSingleTapRunnable != null) {
+                        handler.removeCallbacks(pendingSingleTapRunnable);
+                        pendingDoubleTapKey = 0;
+                        pendingSingleTapRunnable = null;
+                    }
                     openDashboard();
                 }
                 return true;
             }
             if (event.getAction() == KeyEvent.ACTION_UP) {
                 handler.removeCallbacks(homeLongPressRunnable);
-                boolean shouldGoHome = homeDown && !homeLongHandled && !event.isCanceled();
+                boolean shouldAct = homeDown && !homeLongHandled && !event.isCanceled();
                 homeDown = false;
                 homeLongHandled = false;
-                if (shouldGoHome) {
-                    openHome();
+                if (shouldAct) {
+                    if (pendingDoubleTapKey == KeyEvent.KEYCODE_HOME) {
+                        // Double tap on Home: open Settings / Quick Settings!
+                        if (pendingSingleTapRunnable != null) {
+                            handler.removeCallbacks(pendingSingleTapRunnable);
+                            pendingSingleTapRunnable = null;
+                        }
+                        pendingDoubleTapKey = 0;
+                        openSettings();
+                    } else {
+                        // First tap: delay by DOUBLE_TAP_MS to check for double tap
+                        if (pendingSingleTapRunnable != null) {
+                            handler.removeCallbacks(pendingSingleTapRunnable);
+                            pendingSingleTapRunnable = null;
+                        }
+                        pendingDoubleTapKey = KeyEvent.KEYCODE_HOME;
+                        pendingSingleTapRunnable = () -> {
+                            pendingDoubleTapKey = 0;
+                            pendingSingleTapRunnable = null;
+                            openHome();
+                        };
+                        handler.postDelayed(pendingSingleTapRunnable, DOUBLE_TAP_MS);
+                    }
                 }
                 return true;
             }
@@ -219,5 +306,10 @@ public class HomeKeyService extends AccessibilityService {
     public void onInterrupt() {
         handler.removeCallbacks(homeLongPressRunnable);
         handler.removeCallbacks(appsLongPressRunnable);
+        if (pendingSingleTapRunnable != null) {
+            handler.removeCallbacks(pendingSingleTapRunnable);
+            pendingDoubleTapKey = 0;
+            pendingSingleTapRunnable = null;
+        }
     }
 }

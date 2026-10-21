@@ -37,7 +37,9 @@ final class RemoteKeys {
         Map<Integer, String> keys = new HashMap<>();
         for (String entry : entries) {
             if (entry == null) continue;
-            String[] parts = entry.split(":", 2);
+            String trimmed = entry.trim();
+            if (trimmed.startsWith("double:") || trimmed.startsWith("double_")) continue;
+            String[] parts = trimmed.split(":", 2);
             if (parts.length != 2 || parts[1].trim().isEmpty()) continue;
             String key = parts[0].trim();
             int code;
@@ -48,7 +50,65 @@ final class RemoteKeys {
             } else {
                 continue;
             }
-            if (code > 0) keys.put(code, parts[1].trim());
+            if (code > 0) {
+                String pkg = parts[1].trim();
+                if (pkg.contains("|")) {
+                    pkg = pkg.split("\\|", 2)[0].trim();
+                }
+                if (!pkg.isEmpty()) {
+                    keys.put(code, pkg);
+                }
+            }
+        }
+        return keys;
+    }
+
+    /** keycode -> package for double tap actions. */
+    static Map<Integer, String> parseDoubleTapAppKeys(String[] entries) {
+        return parseDoubleTapAppKeys(Arrays.asList(entries), KeyEvent::keyCodeFromString);
+    }
+
+    static Map<Integer, String> parseDoubleTapAppKeys(Iterable<String> entries) {
+        return parseDoubleTapAppKeys(entries, KeyEvent::keyCodeFromString);
+    }
+
+    static Map<Integer, String> parseDoubleTapAppKeys(Iterable<String> entries, ToIntFunction<String> names) {
+        Map<Integer, String> keys = new HashMap<>();
+        for (String entry : entries) {
+            if (entry == null) continue;
+            String trimmed = entry.trim();
+            boolean isExplicitDouble = false;
+            if (trimmed.startsWith("double:") || trimmed.startsWith("double_")) {
+                trimmed = trimmed.substring(7).trim();
+                isExplicitDouble = true;
+            }
+            String[] parts = trimmed.split(":", 2);
+            if (parts.length != 2 || parts[1].trim().isEmpty()) continue;
+            String key = parts[0].trim();
+            int code;
+            if (key.matches("[0-9]{1,6}")) {
+                code = Integer.parseInt(key);
+            } else if (key.matches("KEYCODE_[A-Z0-9_]+")) {
+                code = names.applyAsInt(key);
+            } else {
+                continue;
+            }
+            if (code > 0) {
+                String pkg = parts[1].trim();
+                if (isExplicitDouble) {
+                    if (pkg.contains("|")) {
+                        pkg = pkg.split("\\|", 2)[0].trim();
+                    }
+                    if (!pkg.isEmpty()) {
+                        keys.put(code, pkg);
+                    }
+                } else if (pkg.contains("|")) {
+                    String[] sub = pkg.split("\\|", 2);
+                    if (sub.length > 1 && !sub[1].trim().isEmpty()) {
+                        keys.put(code, sub[1].trim());
+                    }
+                }
+            }
         }
         return keys;
     }
