@@ -35,6 +35,7 @@ public class HomeKeyService extends AccessibilityService {
     private Map<Integer, String> appKeys = Collections.emptyMap();
     /** app_keys, double tap mapping (keycode -> package). */
     private Map<Integer, String> appDoubleKeys = Collections.emptyMap();
+    private Map<Integer, String> appScancodes = Collections.emptyMap();
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private int pendingDoubleTapKey;
@@ -79,6 +80,7 @@ public class HomeKeyService extends AccessibilityService {
         settingsPanel = config.settingsKeyPanel;
         appKeys = RemoteKeys.parseAppKeys(config.appKeys);
         appDoubleKeys = RemoteKeys.parseDoubleTapAppKeys(config.appKeys);
+        appScancodes = RemoteKeys.parseAppScancodes(config.appKeys);
     }
 
     private boolean isSettingsKey(KeyEvent event) {
@@ -144,6 +146,12 @@ public class HomeKeyService extends AccessibilityService {
 
     @Override
     protected boolean onKeyEvent(KeyEvent event) {
+        // A scancode entry is more specific than any keycode, so it goes first.
+        String scanApp = appScancodes.get(event.getScanCode());
+        if (scanApp != null) {
+            if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) RemoteKeys.launch(this, scanApp);
+            return true;
+        }
         if (isSettingsKey(event)) {
             if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) {
                 openSettings();
