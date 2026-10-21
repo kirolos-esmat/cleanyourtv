@@ -8,7 +8,6 @@ on:
 permissions:
   contents: write
   actions: write
-  workflows: write
 
 jobs:
   sync:
@@ -32,7 +31,7 @@ jobs:
           git remote add upstream https://github.com/Gathin23/cleanyourtv.git 2>/dev/null || git remote set-url upstream https://github.com/Gathin23/cleanyourtv.git
           git fetch upstream main
 
-      - name: Check for new commits and trigger CI
+      - name: Check for new commits, merge and trigger CI
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -41,10 +40,13 @@ jobs:
           echo "Upstream commits behind: $UPSTREAM_COMMITS"
           if [ "$UPSTREAM_COMMITS" -gt 0 ]; then
             echo "New commits found in original branch ($UPSTREAM_COMMITS). Merging upstream/main..."
-            git merge --no-edit upstream/main -m "chore(sync): automated sync with upstream main"
+            git merge --no-commit --no-ff upstream/main || true
+            # Preserve our fork's own workflows so GITHUB_TOKEN push is never blocked
+            git checkout HEAD -- .github
+            git commit -m "chore(sync): automated sync with upstream main" || true
             git push origin main
             echo "Triggering CI workflow for new commits..."
-            gh workflow run ci.yml --repo "${{ github.repository }}" --ref main
+            gh workflow run ci.yml --repo "${{ github.repository }}" --ref main || true
           else
             echo "No new commits in original branch. Everything up to date."
           fi
