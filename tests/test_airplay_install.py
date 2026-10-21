@@ -71,6 +71,7 @@ exit 0
             mock_adb.chmod(0o755)
 
             test_env = os.environ.copy()
+            test_env.pop("TV_HOST", None)
             test_env["PATH"] = f"{bin_dir}:{test_env.get('PATH', '')}"
             test_env["TV_HOST"] = "192.0.2.1"
             test_env["DEVICE_NAME"] = "Custom AirPlay"
@@ -123,6 +124,7 @@ exit 0
             mock_adb.chmod(0o755)
 
             test_env = os.environ.copy()
+            test_env.pop("TV_HOST", None)
             test_env["PATH"] = f"{bin_dir}:{test_env.get('PATH', '')}"
 
             result = subprocess.run(
@@ -160,6 +162,7 @@ exit 0
             mock_adb.chmod(0o755)
 
             test_env = os.environ.copy()
+            test_env.pop("TV_HOST", None)
             test_env["PATH"] = f"{bin_dir}:{test_env.get('PATH', '')}"
             test_env["TV_HOST"] = "192.0.2.3"
 
@@ -191,6 +194,7 @@ exit 0
             mock_adb.chmod(0o755)
 
             test_env = os.environ.copy()
+            test_env.pop("TV_HOST", None)
             test_env["PATH"] = f"{bin_dir}:{test_env.get('PATH', '')}"
 
             result = subprocess.run(
@@ -221,6 +225,7 @@ exit 0
             mock_adb.chmod(0o755)
 
             test_env = os.environ.copy()
+            test_env.pop("TV_HOST", None)
             test_env["PATH"] = f"{bin_dir}:{test_env.get('PATH', '')}"
 
             result = subprocess.run(
@@ -251,6 +256,7 @@ exit 0
             mock_adb.chmod(0o755)
 
             test_env = os.environ.copy()
+            test_env.pop("TV_HOST", None)
             test_env["PATH"] = f"{bin_dir}:{test_env.get('PATH', '')}"
 
             result = subprocess.run(

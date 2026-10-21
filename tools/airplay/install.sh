@@ -11,7 +11,14 @@ if [ "${1:-}" = "--verify" ] || [ "${1:-}" = "-v" ] || [ "${1:-}" = "--status" ]
     shift
 fi
 
-TV_HOST="${TV_HOST:-${1:-}}"
+if [ -n "${1:-}" ]; then
+    TV_HOST="$1"
+    if [ -n "${2:-}" ]; then
+        DEVICE_NAME="$2"
+    fi
+else
+    TV_HOST="${TV_HOST:-}"
+fi
 DEFAULT_DEVICE_NAME="Kirolos's Apple TV"
 DEVICE_NAME="${DEVICE_NAME:-$DEFAULT_DEVICE_NAME}"
 
@@ -20,9 +27,6 @@ if [ -z "$TV_HOST" ]; then
     echo "   or: $0 <ip> [\"name\"]" >&2
     echo "   or: $0 --verify <ip>" >&2
     exit 1
-fi
-if [ $# -ge 2 ]; then
-    DEVICE_NAME="$2"
 fi
 
 # Parse target IP and port
