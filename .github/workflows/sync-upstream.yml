@@ -1,16 +1,17 @@
-name: Auto Sync Upstream
+name: Auto Sync Upstream & Trigger CI
 
 on:
   schedule:
-    - cron: '0 */6 * * *' # Runs automatically every 6 hours
-  workflow_dispatch:     # Allows manual trigger anytime from the Actions tab
+    - cron: '*/30 * * * *' # Checks every 30 minutes for new commits in original branch
+  workflow_dispatch:      # Allows manual trigger anytime from the Actions tab
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   sync:
-    name: Sync with Upstream
+    name: Sync with Upstream & Run CI
     runs-on: ubuntu-latest
 
     steps:
@@ -30,15 +31,19 @@ jobs:
           git remote add upstream https://github.com/Gathin23/cleanyourtv.git 2>/dev/null || git remote set-url upstream https://github.com/Gathin23/cleanyourtv.git
           git fetch upstream main
 
-      - name: Merge upstream into main
+      - name: Check for new commits and trigger CI
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git checkout main
           UPSTREAM_COMMITS=$(git rev-list --count HEAD..upstream/main)
           echo "Upstream commits behind: $UPSTREAM_COMMITS"
           if [ "$UPSTREAM_COMMITS" -gt 0 ]; then
-            echo "Merging upstream/main..."
+            echo "New commits found in original branch ($UPSTREAM_COMMITS). Merging upstream/main..."
             git merge --no-edit upstream/main -m "chore(sync): automated sync with upstream main"
             git push origin main
+            echo "Triggering CI workflow for new commits..."
+            gh workflow run ci.yml --repo "${{ github.repository }}" --ref main
           else
-            echo "Already up to date with upstream/main."
+            echo "No new commits in original branch. Everything up to date."
           fi
