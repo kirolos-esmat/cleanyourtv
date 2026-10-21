@@ -38,11 +38,11 @@ public class GlassView extends View {
 
         shadowPaint.setStyle(Paint.Style.FILL);
 
-        // Contrast-aware dual rim: a wider, low-alpha dark outline behind the bright rim ensures
-        // the focus border is clearly legible on pure white/light cards (YouTube, LocalSend, AirScreen).
+        // Contrast-aware dual rim: a slightly wider, low-alpha dark outline behind the bright rim
+        // ensures the focus border is clearly defined and legible on pure white/light cards.
         darkRim.setStyle(Paint.Style.STROKE);
-        darkRim.setStrokeWidth(3f * density);
-        darkRim.setColor(0x38000000);
+        darkRim.setStrokeWidth(2.5f * density);
+        darkRim.setColor(0x2E000000);
 
         rim.setStyle(Paint.Style.STROKE);
         rim.setStrokeWidth(1.5f * density);
@@ -85,38 +85,38 @@ public class GlassView extends View {
 
     @Override
     protected void onDraw(Canvas canvas) {
-        float inset = INSET_DP * density;   // room for the shadow and diffusion
+        float inset = INSET_DP * density;   // room for the diffusion and downward shadow
         rect.set(inset, inset, getWidth() - inset, getHeight() - inset);
 
-        // 1. Directional grounding drop shadow (clean, subtle elevation below the card)
-        // Multi-tier GPU-safe rounded rect fills with low alpha
-        float dy1 = 2f * density, s1 = 2f * density;
+        // 1. Subtle downward grounding shadow (GPU-safe restrained low-alpha layers)
+        float dy1 = 2f * density, s1 = 1.5f * density;
         shadowPaint.setColor(0x14000000);
         canvas.drawRoundRect(rect.left - s1, rect.top - s1 + dy1, rect.right + s1, rect.bottom + s1 + dy1,
                 radius + s1, radius + s1, shadowPaint);
 
-        float dy2 = 3.5f * density, sx2 = 1f * density, sy2 = 2f * density;
-        shadowPaint.setColor(0x1C000000);
-        canvas.drawRoundRect(rect.left - sx2, rect.top - sy2 + dy2, rect.right + sx2, rect.bottom + sy2 + dy2,
-                radius + sx2, radius + sx2, shadowPaint);
+        float dy2 = 3.5f * density, s2 = 2.5f * density;
+        shadowPaint.setColor(0x10000000);
+        canvas.drawRoundRect(rect.left - s2, rect.top - s2 + dy2, rect.right + s2, rect.bottom + s2 + dy2,
+                radius + s2, radius + s2, shadowPaint);
 
-        float dy3 = 4.5f * density, sy3 = 1.5f * density;
-        shadowPaint.setColor(0x16000000);
-        canvas.drawRoundRect(rect.left, rect.top + dy3, rect.right, rect.bottom + sy3 + dy3,
-                radius, radius, shadowPaint);
-
-        // 2. Tight focus diffusion (restrained outer specular softening, no muddy pillow)
-        float o1 = 0.75f * density;
-        glow.setStrokeWidth(1.5f * density);
-        glow.setColor((Math.round(glowAlpha * 0.50f) << 24) | glowRgb);
+        // 2. Tight, smooth focus diffusion (replaces 12-ring outer-stroke loop with crisp ambient diffusion)
+        float o1 = 1.0f * density;
+        glow.setStrokeWidth(2.0f * density);
+        glow.setColor((Math.round(glowAlpha * 0.45f) << 24) | glowRgb);
         canvas.drawRoundRect(rect.left - o1, rect.top - o1, rect.right + o1, rect.bottom + o1,
                 radius + o1, radius + o1, glow);
 
-        float o2 = 1.75f * density;
-        glow.setStrokeWidth(1.5f * density);
-        glow.setColor((Math.round(glowAlpha * 0.18f) << 24) | glowRgb);
+        float o2 = 2.5f * density;
+        glow.setStrokeWidth(2.5f * density);
+        glow.setColor((Math.round(glowAlpha * 0.20f) << 24) | glowRgb);
         canvas.drawRoundRect(rect.left - o2, rect.top - o2, rect.right + o2, rect.bottom + o2,
                 radius + o2, radius + o2, glow);
+
+        float o3 = 4.5f * density;
+        glow.setStrokeWidth(3.0f * density);
+        glow.setColor((Math.round(glowAlpha * 0.08f) << 24) | glowRgb);
+        canvas.drawRoundRect(rect.left - o3, rect.top - o3, rect.right + o3, rect.bottom + o3,
+                radius + o3, radius + o3, glow);
 
         // 3. Translucent glass fill
         canvas.drawRoundRect(rect, radius, radius, fill);
@@ -128,7 +128,7 @@ public class GlassView extends View {
         canvas.drawRoundRect(rect, radius, radius, specular);
         canvas.restore();
 
-        // 5. Dual-rim: dark contrast outline behind bright white/accent rim for visibility on white cards
+        // 5. Dual rim: dark contrast outline behind bright white/accent rim for visibility on white cards
         canvas.drawRoundRect(rect, radius, radius, darkRim);
         canvas.drawRoundRect(rect, radius, radius, rim);
     }

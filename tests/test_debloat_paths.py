@@ -68,7 +68,7 @@ class DebloatPathsTest(unittest.TestCase):
         env.update(CAPTURE=str(capture), HOME=str(home))
         result = subprocess.run(
             ["bash", str(script_path), argument], cwd=cwd, env=env,
-            capture_output=True, text=True,
+            capture_output=True, text=True, stdin=subprocess.DEVNULL,
         )
         return result, capture
 

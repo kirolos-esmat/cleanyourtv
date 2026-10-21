@@ -33,6 +33,7 @@ class SetupwraithGuardTest(unittest.TestCase):
                 # The Home guard asks which app owns Home and which ones answer it.
                 '  *resolve-activity*) echo "com.google.android.tvlauncher/.MainActivity" ;;\n'
                 '  *query-activities*) echo "  com.google.android.tvlauncher/.MainActivity" ;;\n'
+                '  *getprop*) echo 1 ;;\n'
                 '  *) cat > "$CAPTURE" ;;\n'
                 'esac\n')
             client.chmod(0o755)
@@ -40,7 +41,7 @@ class SetupwraithGuardTest(unittest.TestCase):
             capture = Path(tmp) / "commands.txt"
             env = dict(os.environ, CAPTURE=str(capture), **(extra_env or {}))
             result = subprocess.run(["bash", str(tools / "disable.sh"), "debloat.txt"], cwd=repo,
-                                    env=env, capture_output=True, text=True)
+                                    env=env, capture_output=True, text=True, stdin=subprocess.DEVNULL)
             self.assertEqual(result.returncode, 0, result.stderr)
             return capture.read_text().splitlines(), result.stderr
 

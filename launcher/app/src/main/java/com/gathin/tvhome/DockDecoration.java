@@ -86,22 +86,15 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
         float deltaY = cardH * (scale - 1f) / 2f;
         float upwardShift = (advancedEffects && scale > 1f) ? 4f * density : 0f;
 
-        // Card corner radius when scaled
-        float cardRadius = AppAdapter.cornerRadius((int) cardW, density) * scale;
-        float margin = 10f * density;
+        float pad = 14f * density;
+        float radius = 26f * density;
 
-        // Symmetrically expand the dock band so the scaled/translated cards fit with uniform margin
-        rect.left = (rect.left - deltaX) - margin;
-        rect.right = (rect.right + deltaX) + margin;
-        rect.top = (rect.top - deltaY - upwardShift) - margin;
-        rect.bottom = (rect.bottom + deltaY) + margin + namesRoom;
+        // Symmetrically expand the dock band geometry so the scaled/translated cards are reliably contained
+        rect.left = (rect.left - deltaX) - pad;
+        rect.right = (rect.right + deltaX) + pad;
+        rect.top = (rect.top - deltaY - upwardShift) - pad;
+        rect.bottom = (rect.bottom + deltaY) + pad + namesRoom;
 
-        // Ensure the dock band stays within parent canvas boundaries
-        if (rect.left < density) rect.left = density;
-        if (rect.right > parent.getWidth() - density) rect.right = parent.getWidth() - density;
-
-        // Concentric corner radius matching the scaled card corner
-        float radius = cardRadius + margin;
         c.drawRoundRect(rect, radius, radius, band);
         c.drawRoundRect(rect, radius, radius, edge);
     }
