@@ -73,15 +73,19 @@ jobs:
           TAG: ${{ steps.check_release.outputs.tag }}
         run: |
           APK_PATH="launcher/app/build/outputs/apk/release/app-release.apk"
+          cat << 'EOF' > release_notes.md
+          Automated build for upstream release with all custom features included:
+          - ⛅ Live Weather Widget (Open-Meteo)
+          - 🎛️ Quick Control Center (Standby, RAM cleaner, storage cleaner)
+          - 🖼️ Dynamic 32-bit true color online wallpapers (Reddit RSS / Unsplash)
+          - 🔀 Remote interactive tile reordering & HomeKeyService
+          - 📺 Custom IPTV & streaming inputs menu
+          EOF
+
           gh release create "$TAG" "$APK_PATH#CleanYourTV-$TAG.apk" \
             --repo kirolos-esmat/cleanyourtv \
             --title "CleanYourTV $TAG (Custom Fork Build)" \
-            --notes "Automated build for upstream release **$TAG** with all custom features included:
-- ⛅ Live Weather Widget (Open-Meteo)
-- 🎛️ Quick Control Center (Standby, RAM cleaner, storage cleaner)
-- 🖼️ Dynamic 32-bit true color online wallpapers (Reddit RSS / Unsplash)
-- 🔀 Remote interactive tile reordering & HomeKeyService
-- 📺 Custom IPTV & streaming inputs menu"
+            --notes-file release_notes.md
 
       - name: Send Notification via GitHub Issue
         if: steps.check_release.outputs.has_new == 'true'
@@ -89,23 +93,27 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.check_release.outputs.tag }}
         run: |
+          cat << EOF > issue_body.md
+          A new upstream release **$TAG** was published by Gathin23/cleanyourtv.
+
+          Your fork has automatically compiled a customized APK with all your TV features preserved.
+
+          ### 📦 Download the Built APK:
+          You can download the APK directly from your releases:
+          👉 [Download CleanYourTV-$TAG.apk](https://github.com/kirolos-esmat/cleanyourtv/releases/tag/$TAG)
+
+          ### 📺 Update your TV directly:
+          From your computer terminal connected to your TV:
+          \`\`\`bash
+          TV_HOST=192.168.1.126 ./launcher/build-and-install.sh
+          # or install the built apk:
+          adb install -r launcher/app/build/outputs/apk/release/app-release.apk
+          \`\`\`
+
+          *Close this issue once you have updated your TV.*
+          EOF
+
           gh issue create \
             --repo kirolos-esmat/cleanyourtv \
             --title "🚀 New Upstream Release: $TAG is ready to update on your TV!" \
-            --body "A new upstream release **$TAG** was published by Gathin23/cleanyourtv.
-
-Your fork has automatically compiled a customized APK with all your TV features preserved.
-
-### 📦 Download the Built APK:
-You can download the APK directly from your releases:
-👉 [Download CleanYourTV-$TAG.apk](https://github.com/kirolos-esmat/cleanyourtv/releases/tag/$TAG)
-
-### 📺 Update your TV directly:
-From your computer terminal connected to your TV:
-\`\`\`bash
-TV_HOST=192.168.1.126 ./launcher/build-and-install.sh
-# or install the built apk:
-adb install -r launcher/app/build/outputs/apk/release/app-release.apk
-\`\`\`
-
-*Close this issue once you have updated your TV.*"
+            --body-file issue_body.md
