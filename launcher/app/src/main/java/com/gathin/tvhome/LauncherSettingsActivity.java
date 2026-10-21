@@ -159,7 +159,7 @@ public final class LauncherSettingsActivity extends Activity {
         items.add(new WallpaperPickerAdapter.Item(
                 OnlineWallpaper.CHOICE_REDDIT,
                 "Reddit Wallpapers",
-                "r/wallpapers (Hot)",
+                "r/wallpapers (Hot Feed)",
                 "https://preview.redd.it/c7p9uw1miowh1.jpeg?width=640"
         ));
 
@@ -167,33 +167,33 @@ public final class LauncherSettingsActivity extends Activity {
         items.add(new WallpaperPickerAdapter.Item(
                 OnlineWallpaper.CHOICE_BING,
                 "Daily Bing",
-                "Microsoft Bing",
+                "8 Daily Archive Images",
                 OnlineWallpaper.CHOICE_BING
         ));
 
         // 3. Curated Unsplash Photos
         items.add(new WallpaperPickerAdapter.Item(
                 OnlineWallpaper.CHOICE_NATURE,
-                "Nature",
-                "Unsplash Curated",
+                "Nature Gallery",
+                "18 Curated Wallpapers",
                 OnlineWallpaper.URL_NATURE
         ));
         items.add(new WallpaperPickerAdapter.Item(
                 OnlineWallpaper.CHOICE_AURORA,
-                "Aurora",
-                "Unsplash Curated",
+                "Aurora Gallery",
+                "15 Curated Wallpapers",
                 OnlineWallpaper.URL_AURORA
         ));
         items.add(new WallpaperPickerAdapter.Item(
                 OnlineWallpaper.CHOICE_SPACE,
-                "Deep Space",
-                "Unsplash Curated",
+                "Deep Space Gallery",
+                "12 Curated Wallpapers",
                 OnlineWallpaper.URL_SPACE
         ));
         items.add(new WallpaperPickerAdapter.Item(
                 OnlineWallpaper.CHOICE_DARK,
-                "Minimal Dark",
-                "Unsplash Curated",
+                "Minimal Dark Gallery",
+                "12 Curated Wallpapers",
                 OnlineWallpaper.URL_DARK
         ));
 
