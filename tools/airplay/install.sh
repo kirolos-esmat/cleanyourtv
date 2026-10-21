@@ -50,12 +50,11 @@ RECEIVER_COMPONENT="$PKG_NAME/.SettingsReceiver"
 set_setting() {
     local key="$1"
     local value="$2"
+    local escaped_value
+    escaped_value=$(printf '%s' "$value" | sed "s/'/'\\\\''/g")
     local output
-    output=$(adb -s "$TV_TARGET" shell am broadcast \
-        -n "$RECEIVER_COMPONENT" \
-        -a "$PKG_NAME.SET_SETTING" \
-        --es key "$key" \
-        --es value "$value" 2>&1) || true
+    output=$(adb -s "$TV_TARGET" shell \
+        "am broadcast -n '$RECEIVER_COMPONENT' -a '$PKG_NAME.SET_SETTING' --es key '$key' --es value '$escaped_value'" 2>&1) || true
     if echo "$output" | grep -q 'result=-1'; then
         echo "   [ok] $key=$value"
     else
