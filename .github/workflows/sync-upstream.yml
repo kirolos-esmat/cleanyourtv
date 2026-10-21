@@ -1,0 +1,44 @@
+name: Auto Sync Upstream
+
+on:
+  schedule:
+    - cron: '0 */6 * * *' # Runs automatically every 6 hours
+  workflow_dispatch:     # Allows manual trigger anytime from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    name: Sync with Upstream
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream main
+        run: |
+          git remote add upstream https://github.com/Gathin23/cleanyourtv.git 2>/dev/null || git remote set-url upstream https://github.com/Gathin23/cleanyourtv.git
+          git fetch upstream main
+
+      - name: Merge upstream into main
+        run: |
+          git checkout main
+          UPSTREAM_COMMITS=$(git rev-list --count HEAD..upstream/main)
+          echo "Upstream commits behind: $UPSTREAM_COMMITS"
+          if [ "$UPSTREAM_COMMITS" -gt 0 ]; then
+            echo "Merging upstream/main..."
+            git merge --no-edit upstream/main -m "chore(sync): automated sync with upstream main"
+            git push origin main
+          else
+            echo "Already up to date with upstream/main."
+          fi
