@@ -157,7 +157,6 @@ final class Config {
      * invalid values keep the historical shuffle so existing themes rotate exactly as before.
      */
     final String wallpaperOrder;
-    final String wallpaperChoice;
     /** Whether the overlay file was present and parsed. */
     final boolean overlayApplied;
     /** Festive skin from a theme (festival, festival_until, greeting, accent_color); {@link Festival#NONE} if none. */
@@ -261,7 +260,6 @@ final class Config {
         this.wallpaperDim = wallpaperDim;
         this.dockOpacity = dockOpacity;
         this.wallpaperOrder = wallpaperOrder;
-        this.wallpaperChoice = wallpaperChoice;
         this.overlayApplied = overlayApplied;
         this.festival = festival;
         this.raceCalendar = Collections.unmodifiableList(raceCalendar);
@@ -431,14 +429,12 @@ final class Config {
         if (chosenRows >= 0 && chosenRows <= 3) rowsBelow = chosenRows;
         animations = choices.getBoolean("animations", animations);
         advancedEffects = choices.getBoolean("advanced_effects", advancedEffects);
-        ambientGlow = choices.getBoolean(AMBIENT_GLOW_KEY, ambientGlow);
         File wallpaper = dir != null ? new File(dir, WALLPAPER_NAME) : null;
         if (wallpaper != null && !(wallpaper.isFile() && wallpaper.length() > 0)) wallpaper = null;
         // A theme can also switch the wallpaper off while the file is still there.
         boolean wallpaperEnabled = json == null || bool(json, "wallpaper", true);
         if (!wallpaperEnabled) wallpaper = null;
-        int rotationMinutes = choices.getInt("wallpaper_rotation_minutes",
-                json == null ? 0 : integer(json, "wallpaper_rotation_minutes", 0, 0, 1440));
+        int rotationMinutes = json == null ? 0 : integer(json, "wallpaper_rotation_minutes", 0, 0, 1440);
         int wallpaperDim = json == null ? 0 : integer(json, "wallpaper_dim", 0, 0, 90);
         int dockOpacity = json == null ? 100 : integer(json, "dock_opacity", 100, 30, 100);
         dockOpacity = chosenDockOpacity(choices.getInt(DOCK_OPACITY_KEY, -1), dockOpacity);

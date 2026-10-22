@@ -54,12 +54,6 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         /** Called for a D-pad direction key on a tile. Return true when handled (focus stays put). */
         boolean onTileVerticalKey(int position, int keyCode);
 
-        /** Return true if click was consumed (e.g. finishing Move mode). */
-        boolean onTileClicked(int position, Entry entry);
-
-        /** Called when OK is held on a tile. */
-        void onTileLongPressed(int position, View card, Entry entry);
-
         void onLibraryRequested();
         void onLibraryFocused();
         /** Hold OK on a tile: the activity shows the tile menu (move, remove from Home, app info). */
@@ -244,42 +238,6 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         setHasStableIds(true);
     }
 
-    static final String PREF_NAME = "tvhome_order";
-    static final String PREF_KEY = "order";
-
-    private List<String> activeOrder() {
-        List<String> order = new ArrayList<>();
-        String saved = ctx.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE).getString(PREF_KEY, null);
-        if (saved != null && !saved.isEmpty()) {
-            for (String p : saved.split(",")) {
-                String trimmed = p.trim();
-                if (!trimmed.isEmpty() && !order.contains(trimmed)) order.add(trimmed);
-            }
-        }
-        for (String p : favourites) {
-            if (!order.contains(p)) order.add(p);
-        }
-        return order;
-    }
-
-    void saveOrder() {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < items.size(); i++) {
-            Entry e = items.get(i);
-            if (e.kind == Entry.EMPTY || e.kind == Entry.HOME_SETTINGS) continue;
-            if (sb.length() > 0) sb.append(',');
-            sb.append(e.pkg);
-        }
-        ctx.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-                .edit()
-                .putString(PREF_KEY, sb.toString())
-                .commit();
-    }
-
-    Entry entryAt(int position) {
-        return position >= 0 && position < items.size() ? items.get(position) : null;
-    }
-
     /**
      * Rebuilds the tiles. A shown module card stands in for every tile of its package (same component,
      * so focus follows it); hidden_apps wins over a card, and a card's package in dock_apps takes that slot.
@@ -334,17 +292,10 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
                 fresh.add(new Entry(label, component, banner, icon));
             }
         }
-        final List<String> customOrder = activeOrder();
         Collections.sort(fresh, (a, b) -> {
             // The owner's own order first; tiles it does not know (new installs) follow by the rule below.
             int saved = Order.compare(savedRanks, a.component.flattenToShortString(), b.component.flattenToShortString());
             if (saved != 0) return saved;
-            int ca = customOrder.indexOf(a.pkg), cb = customOrder.indexOf(b.pkg);
-            if (ca >= 0 || cb >= 0) {
-                if (ca < 0) return 1;
-                if (cb < 0) return -1;
-                return Integer.compare(ca, cb);
-            }
             int fa = favourites.indexOf(a.pkg), fb = favourites.indexOf(b.pkg);
             if (fa >= 0 || fb >= 0) {
                 if (fa < 0) return 1;
@@ -352,8 +303,8 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
                 return Integer.compare(fa, fb);
             }
             // Cards come right after the configured dock apps, before the alphabetical grid.
-            boolean cardA = a.kind == Entry.CARD, cardB = b.kind == Entry.CARD;
-            if (cardA != cardB) return cardA ? -1 : 1;
+            boolean ca = a.kind == Entry.CARD, cb = b.kind == Entry.CARD;
+            if (ca != cb) return ca ? -1 : 1;
             return a.label.compareToIgnoreCase(b.label);
         });
         // Retain the optional Default-home tile until dependent tile-ordering work is merged.
@@ -499,11 +450,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             h.label.setText(e.label);
             h.label.setVisibility(View.VISIBLE);
         }
-        h.card.setOnClickListener(v -> {
-            int pos = h.getBindingAdapterPosition();
-            if (listener != null && pos != RecyclerView.NO_POSITION && listener.onTileClicked(pos, e)) return;
-            launch(e);
-        });
+        h.card.setOnClickListener(v -> launch(e));
         h.card.setOnLongClickListener(v -> {
             if (tileMenu) {
                 int pos = h.getBindingAdapterPosition();

@@ -7,10 +7,8 @@
     <uses-feature android:name="android.hardware.wifi" android:required="false" />
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 
-    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
-    <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
     <!-- Needed since Android 10 to read the Wi-Fi network name for the network pill. Never requested at
          runtime: build-and-install grants it with pm grant, so lint's Android 12 "ask for COARSE with
          FINE" rule does not apply here. -->
@@ -84,7 +82,7 @@
             android:clearTaskOnLaunch="true"
             android:configChanges="orientation|screenSize|keyboard|keyboardHidden|uiMode"
             android:screenOrientation="landscape">
-            <intent-filter android:priority="2">
+            <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.HOME" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -153,14 +151,6 @@
         <!-- The same clock, started by Home itself after home_idle_clock_minutes without input. -->
         <activity
             android:name=".ClockActivity"
-            android:exported="false"
-            android:excludeFromRecents="true"
-            android:noHistory="true"
-            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
-
-        <!-- Pure black audio-only window, dismisses on any key press -->
-        <activity
-            android:name=".BlackoutActivity"
             android:exported="false"
             android:excludeFromRecents="true"
             android:noHistory="true"

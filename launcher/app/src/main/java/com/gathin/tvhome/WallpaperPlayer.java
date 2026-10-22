@@ -25,12 +25,10 @@ import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** Displays and rotates a theme's local wallpaper images or streamable online wallpapers while Home is visible. */
+/** Displays and rotates a theme's local wallpaper images while Home is visible. */
 final class WallpaperPlayer {
-    private final Context context;
     private final FrameLayout root;
     private final ImageView image;
-    private ImageView crossfadeImage;
     private final List<File> files;
     private final long interval;
     private final String order;
@@ -54,9 +52,7 @@ final class WallpaperPlayer {
     private final Map<String, String> names;
 
     WallpaperPlayer(Context context, FrameLayout root, Config config) {
-        this.context = context.getApplicationContext();
         this.root = root;
-        this.onlineChoice = config.wallpaperChoice;
         files = new ArrayList<>(config.wallpapers);
         interval = config.wallpaperRotationMinutes * 60_000L;
         bitmapConfig = config.wallpaperTrueColor ? Bitmap.Config.ARGB_8888 : Bitmap.Config.RGB_565;
@@ -93,22 +89,6 @@ final class WallpaperPlayer {
      * Only the later changes of a rotation decode in the background.
      */
     private void showFirst() {
-        if (OnlineWallpaper.isOnlineChoice(onlineChoice)) {
-            String cachedChoice = context.getSharedPreferences("tvhome_online_wp", Context.MODE_PRIVATE)
-                    .getString("cached_choice", "");
-            File cached = OnlineWallpaper.getCacheFile(context);
-            if (onlineChoice.equals(cachedChoice) && cached.exists() && cached.length() > 0) {
-                Bitmap bitmap = decode(cached);
-                if (bitmap != null) {
-                    image.setImageBitmap(bitmap);
-                    displayed = onlineChoice;
-                    return;
-                }
-            }
-            fetchOnlineWallpaper();
-            return;
-        }
-
         String previous = preferences.getString("image", "");
         File first = WallpaperRotation.find(files, previous);
         if (first == null) first = WallpaperRotation.pick(files, previous, order, random);
@@ -131,128 +111,6 @@ final class WallpaperPlayer {
         }
     }
 
-    private void fetchOnlineWallpaper() {
-        if (!OnlineWallpaper.isOnlineChoice(onlineChoice) || loading || closed) return;
-        loading = true;
-        decoder.execute(() -> {
-            File downloaded = OnlineWallpaper.downloadWallpaper(context, onlineChoice);
-            root.post(() -> {
-                loading = false;
-                if (closed || !active) return;
-                if (downloaded != null && downloaded.exists()) {
-                    Bitmap bmp = decode(downloaded);
-                    if (bmp != null) {
-                        if (closed || !active) {
-                            bmp.recycle();
-                            return;
-                        }
-                        applyBitmapWithCrossfade(bmp);
-                        displayed = onlineChoice;
-                    }
-                }
-            });
-        });
-    }
-
-    private void applyBitmapWithCrossfade(Bitmap bmp) {
-        if (bmp == null) return;
-        if (image.getDrawable() == null) {
-            image.setImageBitmap(bmp);
-            return;
-        }
-        if (crossfadeImage == null) {
-            crossfadeImage = new ImageView(context);
-            crossfadeImage.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            crossfadeImage.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-            int idx = root.indexOfChild(image);
-            root.addView(crossfadeImage, idx + 1, new FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        } else {
-            crossfadeImage.animate().cancel();
-            Drawable pending = crossfadeImage.getDrawable();
-            if (pending instanceof BitmapDrawable) {
-                Bitmap pendingBmp = ((BitmapDrawable) pending).getBitmap();
-                if (pendingBmp != null && !pendingBmp.isRecycled() && pendingBmp != bmp) {
-                    Drawable current = image.getDrawable();
-                    if (!(current instanceof BitmapDrawable) || ((BitmapDrawable) current).getBitmap() != pendingBmp) {
-                        pendingBmp.recycle();
-                    }
-                }
-            }
-            crossfadeImage.setImageDrawable(null);
-        }
-        crossfadeImage.setImageBitmap(bmp);
-        crossfadeImage.setAlpha(0f);
-        crossfadeImage.setVisibility(View.VISIBLE);
-        crossfadeImage.animate()
-                .alpha(1f)
-                .setDuration(350L)
-                .withEndAction(() -> {
-                    Drawable old = image.getDrawable();
-                    image.setImageBitmap(bmp);
-                    if (old instanceof BitmapDrawable) {
-                        Bitmap oldBmp = ((BitmapDrawable) old).getBitmap();
-                        if (oldBmp != null && !oldBmp.isRecycled() && oldBmp != bmp) {
-                            oldBmp.recycle();
-                        }
-                    }
-                    crossfadeImage.setVisibility(View.GONE);
-                    crossfadeImage.setImageDrawable(null);
-                })
-                .start();
-    }
-
-    void shuffle() {
-        if (closed || loading) return;
-        long now = System.currentTimeMillis();
-        preferences.edit().putLong("changed", now).apply();
-        if (OnlineWallpaper.isOnlineChoice(onlineChoice) || files.isEmpty()) {
-            loading = true;
-            decoder.execute(() -> {
-                String choice = OnlineWallpaper.isOnlineChoice(onlineChoice) ? onlineChoice : OnlineWallpaper.CHOICE_REDDIT;
-                File downloaded = OnlineWallpaper.downloadWallpaper(context, choice, true);
-                root.post(() -> {
-                    loading = false;
-                    if (closed || !active) return;
-                    if (downloaded != null && downloaded.exists()) {
-                        Bitmap bmp = decode(downloaded);
-                        if (bmp != null) {
-                            if (closed || !active) {
-                                bmp.recycle();
-                                return;
-                            }
-                            applyBitmapWithCrossfade(bmp);
-                            displayed = choice;
-                            preferences.edit().putLong("changed", System.currentTimeMillis()).apply();
-                        }
-                    }
-                });
-            });
-            return;
-        }
-        if (files.isEmpty()) return;
-        String previous = preferences.getString("image", "");
-        File next = WallpaperRotation.pick(files, previous, random);
-        if (next == null) return;
-        loading = true;
-        decoder.execute(() -> {
-            Bitmap bitmap = decode(next);
-            root.post(() -> {
-                loading = false;
-                if (closed || !active) {
-                    if (bitmap != null) bitmap.recycle();
-                    return;
-                }
-                if (bitmap != null) {
-                    applyBitmapWithCrossfade(bitmap);
-                    displayed = next.getName();
-                    preferences.edit().putString("image", displayed)
-                            .putLong("changed", System.currentTimeMillis()).apply();
-                }
-            });
-        });
-    }
-
     void start() {
         active = true;
         update();
@@ -266,75 +124,14 @@ final class WallpaperPlayer {
         active = false;
         closed = true;
         decoder.shutdownNow();
-        if (crossfadeImage != null) {
-            crossfadeImage.animate().cancel();
-            Drawable pending = crossfadeImage.getDrawable();
-            if (pending instanceof BitmapDrawable) {
-                Bitmap b = ((BitmapDrawable) pending).getBitmap();
-                if (b != null && !b.isRecycled()) b.recycle();
-            }
-            crossfadeImage.setImageDrawable(null);
-        }
-        Drawable d = image.getDrawable();
-        if (d instanceof BitmapDrawable) {
-            Bitmap b = ((BitmapDrawable) d).getBitmap();
-            if (b != null && !b.isRecycled()) b.recycle();
-        }
-        image.setImageDrawable(null);
-    }
-
-    void trimMemory(int level) {
-        if (!active && (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND
-                || level == android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL)) {
-            if (crossfadeImage != null) {
-                crossfadeImage.animate().cancel();
-                Drawable pending = crossfadeImage.getDrawable();
-                if (pending instanceof BitmapDrawable) {
-                    Bitmap b = ((BitmapDrawable) pending).getBitmap();
-                    if (b != null && !b.isRecycled()) b.recycle();
-                }
-                crossfadeImage.setImageDrawable(null);
-                crossfadeImage.setVisibility(View.GONE);
-            }
-        }
     }
 
     void update() {
-        if (!active || closed || loading) return;
-        long now = System.currentTimeMillis();
-        long changed = preferences.getLong("changed", 0);
-
-        if (OnlineWallpaper.isOnlineChoice(onlineChoice)) {
-            // Auto-rotate only when interval is enabled (> 0) and due!
-            if (interval > 0 && WallpaperRotation.due(changed, now, interval)) {
-                loading = true;
-                decoder.execute(() -> {
-                    File downloaded = OnlineWallpaper.downloadWallpaper(context, onlineChoice, true);
-                    root.post(() -> {
-                        loading = false;
-                        if (closed || !active) return;
-                        if (downloaded != null && downloaded.exists()) {
-                            Bitmap bmp = decode(downloaded);
-                            if (bmp != null) {
-                                if (closed || !active) {
-                                    bmp.recycle();
-                                    return;
-                                }
-                                applyBitmapWithCrossfade(bmp);
-                                displayed = onlineChoice;
-                                preferences.edit().putLong("changed", System.currentTimeMillis()).apply();
-                            }
-                        }
-                    });
-                });
-            }
-            return;
-        }
-
-        if (files.isEmpty()) return;
+        if (!active || closed || loading || files.isEmpty()) return;
         String previous = preferences.getString("image", "");
         File selected = WallpaperRotation.find(files, previous);
-        if (selected == null || WallpaperRotation.due(changed, now, interval)) {
+        long changed = preferences.getLong("changed", 0);
+        if (selected == null || WallpaperRotation.due(changed, System.currentTimeMillis(), interval)) {
             selected = WallpaperRotation.pick(files, previous, order, random);
         }
         if (selected == null || selected.getName().equals(displayed)) return;

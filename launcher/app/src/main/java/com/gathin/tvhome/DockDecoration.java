@@ -19,8 +19,6 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
     private final Paint band = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint edge = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF rect = new RectF();
-    private final AppAdapter adapter;
-    private final boolean advancedEffects;
 
     /** Extra band below the tiles for their names (always_show_names), in px. */
     private final float namesRoom;
@@ -65,10 +63,6 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
         return Math.max(0f, Math.min(gap, roomPx));
     }
 
-    DockDecoration(int dockSize, float density, boolean translucent, boolean names) {
-        this(dockSize, density, translucent, names, null, false);
-    }
-
     @Override
     public void getItemOffsets(@NonNull Rect outRect, @NonNull View view, @NonNull RecyclerView parent,
                                @NonNull RecyclerView.State state) {
@@ -90,8 +84,6 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
             RecyclerView.ViewHolder vh = parent.getChildViewHolder(child);
             View card = vh instanceof AppAdapter.Holder ? ((AppAdapter.Holder) vh).card : child.findViewById(R.id.card);
             if (card == null) continue;
-            cardW = card.getWidth();
-            cardH = card.getHeight();
             float l = child.getLeft() + card.getLeft();
             float t = child.getTop() + card.getTop() + child.getTranslationY();
             float r = l + card.getWidth();

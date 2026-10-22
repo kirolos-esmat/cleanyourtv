@@ -108,8 +108,4 @@
     <string name="race_live">%1$s · בשידור חי</string>
     <string name="race_finished">הדגל המשובץ</string>
     <string name="last_opened">נפתח לאחרונה %1$s</string>
-    <string name="control_center">מרכז בקרה</string>
-    <string name="move_app">העברה</string>
-    <string name="app_info">פרטי האפליקציה</string>
-    <string name="moving_hint">העברת %1$s \u00B7 יש ללחוץ על אישור בסיום</string>
 </resources>

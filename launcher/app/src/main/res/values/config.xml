@@ -17,35 +17,10 @@
 
     <!-- Apps pinned to the dock row at the bottom, in this order. Missing apps are skipped. -->
     <string-array name="dock_apps">
-        <!-- Dock (Top 4) -->
+        <item>com.netflix.ninja</item>
+        <item>com.amazon.amazonvideo.livingroom</item>
         <item>com.google.android.youtube.tv</item>
-        <item>com.plexapp.android</item>
-        <item>com.nostalgiatv.nostalgia_tv</item>
-        <item>com.nst.iptvsmarterstvbox</item>
-        <!-- Grid (Monet Launcher order) -->
-        <item>com.instagram.airwave</item>
-        <item>com.anghami</item>
-        <item>org.smarttube.stable</item>
-        <item>org.jellyfin.androidtv</item>
-        <item>com.google.android.tv</item>
-        <item>nextapp.fx</item>
-        <item>com.cybercat.adbappcontrol.tv</item>
-        <item>org.localsend.localsend_app</item>
-        <item>com.ionitech.airscreen</item>
-        <item>com.phlox.tvwebbrowser</item>
-        <item>com.esaba.downloader</item>
-        <item>ch.protonvpn.android</item>
-        <item>com.v2raytun.android</item>
-        <item>com.android.vending</item>
-        <item>com.mxtech.videoplayer.pro</item>
-        <item>com.xiaomi.mitv.mediaexplorer</item>
-        <item>com.mitv.gallery</item>
-        <item>com.xiaomi.mitv.smartshare</item>
-        <item>com.wolf.google.lm</item>
-        <item>com.android.tv.settings</item>
-        <item>com.klevico.monet</item>
-        <item>io.netbird.client</item>
-        <item>com.spotify.tv.android</item>
+        <item>in.startv.hotstar</item>
     </string-array>
     <!-- With fewer dock_apps than columns (or a dock app that is not installed), the free dock slots take
          the first grid apps, so the dock never shows a gap. false leaves them empty (#162); a theme can
@@ -55,10 +30,11 @@
     <!-- Apps never shown as tiles (e.g. the Live TV app, which the Inputs menu already covers). -->
     <string-array name="hidden_apps">
         <item>com.mediatek.wwtv.tvcenter</item>
+        <item>com.mitv.gallery</item>
     </string-array>
 
     <!-- The TV's Live TV / tuner app, offered at the end of the Inputs menu. Leave empty to omit. -->
-    <string name="live_tv_package" translatable="false">com.google.android.tv</string>
+    <string name="live_tv_package" translatable="false">com.mediatek.wwtv.tvcenter</string>
 
     <!-- Open the Live TV app above the first time Home comes up after the TV is switched on, for sets that are
          mostly used for broadcast TV. Once per boot: Home after that stays Home. Can also be set with
@@ -190,10 +166,6 @@
          still opens on a tap; "hold:scan:490:..." works for scancodes. A key with only a hold entry does nothing
          on a tap. A listed app that is not installed leaves the button doing nothing. Leave empty to omit. -->
     <string-array name="app_keys" translatable="false">
-        <item>190:org.smarttube.stable</item>
-        <item>192:com.plexapp.android|com.nostalgiatv.nostalgia_tv</item>
-        <item>193:com.nst.iptvsmarterstvbox</item>
-        <item>194:com.spotify.tv.android|com.anghami</item>
     </string-array>
 
     <!-- Package of the stock launcher, for TVs whose firmware turns it back on after it was disabled. XGIMI's
@@ -205,15 +177,6 @@
     <!-- Show the Solar Hijri (Shamsi) date used in Iran and Afghanistan, e.g. "27 Mehr 1405", above the
          Gregorian date. -->
     <bool name="shamsi_date">false</bool>
-
-    <!-- Weather above the date: place from config or public IP once a day (ipwho.is / ipapi.co),
-         weather from Open-Meteo every 30 minutes. Needs internet; false makes the launcher send no requests.
-         Can also be set in config.json. -->
-    <bool name="show_weather">true</bool>
-    <string name="weather_latitude" translatable="false"></string>
-    <string name="weather_longitude" translatable="false"></string>
-    <string name="weather_place" translatable="false"></string>
-    <string name="weather_unit" translatable="false">celsius</string>
 
     <!-- A name after the greeting: "Mr. Trịnh" shows GOOD MORNING, MR. TRỊNH. Empty: the greeting alone. -->
     <string name="greeting_name" translatable="false"></string>
@@ -341,7 +304,7 @@
          colour; the shelf gets a larger name, a "Last opened" line (from the apps Home opened) and dock position
          dots, the focus glow takes the app's colour and the dock band turns translucent. false keeps the plain
          shelf. Can also be set with "cinematic_home": true in a theme's config.json. -->
-    <bool name="cinematic_home">true</bool>
+    <bool name="cinematic_home">false</bool>
 
     <!-- The glow behind the dock in the focused app's colour (red for YouTube, blue for Prime Video). false keeps
          only background_color or the wallpaper behind everything. Can also be set with "ambient_glow": false in a
