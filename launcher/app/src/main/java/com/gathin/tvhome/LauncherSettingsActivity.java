@@ -26,11 +26,13 @@ public final class LauncherSettingsActivity extends Activity {
     private final TextView[] columnChoices = new TextView[4];
     private final TextView[] rowChoices = new TextView[4];
     private TextView wallpaperChoice;
+    private TextView ambientGlowChoice;
     private TextView animationsChoice;
     private TextView advancedChoice;
     private TextView followThemeChoice;
     private int columns;
     private int rowsBelowDock;
+    private boolean ambientGlow;
     private boolean animations;
     private boolean advancedEffects;
 
@@ -42,6 +44,7 @@ public final class LauncherSettingsActivity extends Activity {
         Config config = Config.load(this);
         columns = config.columns;
         rowsBelowDock = config.rowsBelowDock;
+        ambientGlow = config.ambientGlow;
         animations = config.animations;
         advancedEffects = config.animations && config.advancedEffects;
 
@@ -77,6 +80,13 @@ public final class LauncherSettingsActivity extends Activity {
         }
         wallpaperChoice = findViewById(R.id.wallpaperChoice);
         wallpaperChoice.setOnClickListener(v -> showWallpaperPicker());
+        ambientGlowChoice = findViewById(R.id.ambientGlowChoice);
+        ambientGlowChoice.setOnClickListener(v -> {
+            ambientGlow = !ambientGlow;
+            choices.edit().putBoolean(Config.AMBIENT_GLOW_KEY, ambientGlow).apply();
+            setResult(RESULT_OK);
+            refresh();
+        });
         animationsChoice = findViewById(R.id.animationsChoice);
         animationsChoice.setOnClickListener(v -> {
             animations = !animations;
@@ -103,10 +113,12 @@ public final class LauncherSettingsActivity extends Activity {
         followThemeChoice.setOnClickListener(v -> {
             if (!hasOnTvChoices()) return;
             choices.edit().remove("columns").remove(Config.ROWS_BELOW_DOCK_KEY).remove("animations")
-                    .remove("advanced_effects").remove(Config.WALLPAPER_CHOICE_KEY).commit();
+                    .remove("advanced_effects").remove(Config.WALLPAPER_CHOICE_KEY)
+                    .remove(Config.AMBIENT_GLOW_KEY).commit();
             Config current = Config.load(this);
             columns = current.columns;
             rowsBelowDock = current.rowsBelowDock;
+            ambientGlow = current.ambientGlow;
             animations = current.animations;
             advancedEffects = current.animations && current.advancedEffects;
             setResult(RESULT_OK);
@@ -281,6 +293,8 @@ public final class LauncherSettingsActivity extends Activity {
         for (int i = 0; i < rowChoices.length; i++) {
             rowChoices[i].setSelected(rowsBelowDock == i);
         }
+        ambientGlowChoice.setText(getString(R.string.ambient_glow_state,
+                getString(ambientGlow ? R.string.on : R.string.off)));
         animationsChoice.setText(getString(R.string.animations_state,
                 getString(animations ? R.string.on : R.string.off)));
         advancedChoice.setText(getString(R.string.advanced_effects_state,
@@ -305,7 +319,8 @@ public final class LauncherSettingsActivity extends Activity {
     private boolean hasOnTvChoices() {
         return choices.contains("columns") || choices.contains(Config.ROWS_BELOW_DOCK_KEY)
                 || choices.contains("animations") || choices.contains("advanced_effects")
-                || choices.contains(Config.WALLPAPER_CHOICE_KEY);
+                || choices.contains(Config.WALLPAPER_CHOICE_KEY)
+                || choices.contains(Config.AMBIENT_GLOW_KEY);
     }
 
     private void open(Intent intent) {

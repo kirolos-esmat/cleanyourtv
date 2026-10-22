@@ -350,7 +350,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // a fade renders it into a full-screen offscreen buffer first.
         ambient.forceHasOverlappingRendering(false);
         ambientGlow = cfg.ambientGlow;
-        if (!ambientGlow) ambient.setVisibility(View.GONE);
+        if (!ambientGlow) {
+            ambient.setVisibility(View.GONE);
+            ambient.setAlpha(0f);
+        }
         heroName = findViewById(R.id.heroName);
         hero = findViewById(R.id.hero);
         // The hero is now a group (name, and the cinematic lines): without this every fade of the default
@@ -1386,7 +1389,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         glassTargetX = x;
         glassTargetY = y;
         // Cinematic shelf: the highlight glows in the dock app's colour, plain white in the grid.
-        int accent = cinematic && !festive && position < COLUMNS ? adapter.ambientColorAt(position) : (festive ? festival.accentColor() : 0);
+        int accent = cinematic && ambientGlow && !festive && position < COLUMNS ? adapter.ambientColorAt(position) : (festive ? festival.accentColor() : 0);
         if (accent != glassAccent) {
             glassAccent = accent;
             glass.setAccent(accent);
@@ -1454,7 +1457,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         int color = adapter.ambientColorAt(position);
         float y = dockTopInRoot - 14 * density - 26 * density - hero.getHeight();
         boolean changed = !label.contentEquals(heroName.getText());
-        if (cinematic) showHeroArt(position);
+        if (cinematic && ambientGlow) showHeroArt(position);
 
         if (!animations || reducedMotion) {
             // Snap the shelf instead of sliding and fading it: each of those frames repaints the
@@ -1527,7 +1530,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         heroName.setLetterSpacing(-0.025f);
         heroMeta.setVisibility(View.INVISIBLE);   // keeps its height, so the name does not jump when it fills in
         heroDots.setVisibility(View.VISIBLE);
-        if (cinematic) {
+        if (cinematic && ambientGlow) {
             heroArt.setVisibility(View.VISIBLE);
             heroArt.forceHasOverlappingRendering(false);
             View scrim = findViewById(R.id.heroScrim);
@@ -1566,6 +1569,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     /** Swaps the backdrop to this app's artwork: fade out, swap, fade in, the way the shelf's name changes. */
     private void showHeroArt(int position) {
+        if (!ambientGlow) return;
         String key = adapter.keyAt(position);
         if (key == null) return;
         heroArt.animate().cancel();

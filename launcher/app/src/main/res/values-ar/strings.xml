@@ -51,6 +51,8 @@
     <string name="card_state_new_label">اسم جديد</string>
     <string name="launcher_settings">إعدادات المشغّل</string>
     <string name="columns_label">تطبيقات في كل صف</string>
+    <string name="ambient_glow_state">لون الخلفية: %1$s</string>
+    <string name="ambient_glow_hint">تلوين الخلفية بلون التطبيق المحدد.</string>
     <string name="animations_state">الرسوم المتحركة: %1$s</string>
     <string name="advanced_effects">تأثيرات متقدمة</string>
     <string name="advanced_effects_state">تأثيرات متقدمة: %1$s</string>
