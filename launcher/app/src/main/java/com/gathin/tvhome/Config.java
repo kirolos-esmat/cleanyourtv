@@ -115,6 +115,7 @@ final class Config {
     final int wifiLabelWidth;
     /** Decode wallpapers in 32-bit colour instead of RGB_565 (config.xml wallpaper_true_color). */
     final boolean wallpaperTrueColor;
+    final String wallpaperChoice;
     /** The focused tile and the glass highlight swing past their target before settling (config.xml, focus_overshoot). */
     final boolean focusOvershoot;
     final String vpnApp;
@@ -167,6 +168,11 @@ final class Config {
     final boolean cinematicHome;
     /** The glow in the focused app's colour behind the dock (config.xml, ambient_glow); false keeps the background plain. */
     final boolean ambientGlow;
+    final boolean showWeather;
+    final String weatherLatitude;
+    final String weatherLongitude;
+    final String weatherPlace;
+    final String weatherUnit;
     /** The focus highlight in the focused app's colour on every tile (config.xml, app_glow), as cinematic_home does for the dock. */
     final boolean appGlow;
     /** Minutes Home may sit untouched before the clock screensaver (config.xml, home_idle_clock_minutes); 0 is off. */
@@ -194,9 +200,10 @@ final class Config {
                    boolean shamsiDate, String greetingName, boolean moduleCards, boolean reducedMotion, boolean bootToLiveTv, boolean dockTitle, boolean dockRow, boolean topMenu, boolean launcherSettingsButton, boolean reorderButton, boolean showNetworkPill, boolean showInputsPill, boolean iconOnlyButtons, boolean iconOnlyInputs, boolean libraryButton, int wifiLabelWidth, boolean alwaysShowNames, boolean wallpaperTrueColor, boolean focusOvershoot, String vpnApp,
                    boolean showHomeSettingsShortcut, boolean showStats, boolean appLibrary, int backgroundColor, int skyIntensity,
                    int[] settingsKeycodes, boolean settingsKeyPanel, boolean restoreKeyServices, boolean wallpaperEnabled, File wallpaper, List<File> wallpapers,
-                   int wallpaperRotationMinutes, int wallpaperDim, int dockOpacity, String wallpaperOrder, boolean overlayApplied,
+                   int wallpaperRotationMinutes, int wallpaperDim, int dockOpacity, String wallpaperOrder, String wallpaperChoice, boolean overlayApplied,
                    Festival festival, int[] inputKeycodes, List<String> appKeys, String stockHomeRedirect,
                    List<RaceWeekend.Race> raceCalendar, boolean cinematicHome, boolean ambientGlow, boolean appGlow, int homeIdleClockMinutes,
+                   boolean showWeather, String weatherLatitude, String weatherLongitude, String weatherPlace, String weatherUnit,
                    boolean keyFilter, boolean dockGlass, String glowStyle, boolean wallpaperCaptions,
                    boolean handleViewInputs, boolean tileMenu, boolean dockEvenPadding) {
         this.handleViewInputs = handleViewInputs;
@@ -260,12 +267,18 @@ final class Config {
         this.wallpaperDim = wallpaperDim;
         this.dockOpacity = dockOpacity;
         this.wallpaperOrder = wallpaperOrder;
+        this.wallpaperChoice = wallpaperChoice;
         this.overlayApplied = overlayApplied;
         this.festival = festival;
         this.raceCalendar = Collections.unmodifiableList(raceCalendar);
         this.cinematicHome = cinematicHome;
         this.ambientGlow = ambientGlow;
         this.appGlow = appGlow;
+        this.showWeather = showWeather;
+        this.weatherLatitude = weatherLatitude;
+        this.weatherLongitude = weatherLongitude;
+        this.weatherPlace = weatherPlace;
+        this.weatherUnit = weatherUnit;
         this.homeIdleClockMinutes = homeIdleClockMinutes;
         this.dockGlass = dockGlass;
         this.dockEvenPadding = dockEvenPadding;
@@ -342,6 +355,11 @@ final class Config {
         boolean cinematic = res.getBoolean(R.bool.cinematic_home);
         boolean ambientGlow = res.getBoolean(R.bool.ambient_glow);
         boolean appGlow = res.getBoolean(R.bool.app_glow);
+        boolean showWeather = res.getBoolean(R.bool.show_weather);
+        String weatherLat = res.getString(R.string.weather_latitude).trim();
+        String weatherLon = res.getString(R.string.weather_longitude).trim();
+        String weatherPlace = res.getString(R.string.weather_place).trim();
+        String weatherUnit = res.getString(R.string.weather_unit).trim();
         int idleClockMinutes = res.getInteger(R.integer.home_idle_clock_minutes);
         boolean keyFilter = res.getBoolean(R.bool.key_filter);
         boolean dockGlass = res.getBoolean(R.bool.dock_glass);
@@ -412,6 +430,11 @@ final class Config {
             cinematic = bool(json, "cinematic_home", cinematic);
             ambientGlow = bool(json, "ambient_glow", ambientGlow);
             appGlow = bool(json, "app_glow", appGlow);
+            showWeather = bool(json, "show_weather", showWeather);
+            weatherLat = string(json, "weather_latitude", weatherLat).trim();
+            weatherLon = string(json, "weather_longitude", weatherLon).trim();
+            weatherPlace = string(json, "weather_place", weatherPlace).trim();
+            weatherUnit = string(json, "weather_unit", weatherUnit).trim();
             idleClockMinutes = integer(json, "home_idle_clock_minutes", idleClockMinutes, 0, 1440);
             keyFilter = bool(json, "key_filter", keyFilter);
             dockGlass = bool(json, "dock_glass", dockGlass);
@@ -468,9 +491,10 @@ final class Config {
                 Math.max(1, columns), Math.max(0, rowsBelow), animations, advancedEffects,
                 shamsi, greetingName, moduleCards, reducedMotion, bootToLiveTv, dockTitle, dockRow, topMenu, launcherSettingsButton, reorderButton, showNetworkPill, showInputsPill, iconOnlyButtons, iconOnlyInputs, libraryButton, wifiLabelWidth, alwaysShowNames, wallpaperTrueColor, focusOvershoot, vpn, homeSettings, showStats, library, background,
                 Math.max(0, Math.min(100, skyIntensity)), settingsKeycodes, settingsKeyPanel, restoreKeyServices, wallpaperEnabled, wallpaper,
-                wallpapers, rotationMinutes, wallpaperDim, dockOpacity, wallpaperOrder, applied,
+                wallpapers, rotationMinutes, wallpaperDim, dockOpacity, wallpaperOrder, wallpaperChoice, applied,
                 festival, inputKeycodes, appKeys, stockHomeRedirect, json == null ? Collections.emptyList() : raceCalendar(json), cinematic, ambientGlow, appGlow,
-                Math.max(0, idleClockMinutes), keyFilter, dockGlass, glowStyle, wallpaperCaptions, handleViewInputs, tileMenu, dockEvenPadding);
+                Math.max(0, idleClockMinutes), showWeather, weatherLat, weatherLon, weatherPlace, weatherUnit,
+                keyFilter, dockGlass, glowStyle, wallpaperCaptions, handleViewInputs, tileMenu, dockEvenPadding);
     }
 
     /**

@@ -2,121 +2,128 @@ package com.gathin.tvhome;
 
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
-import android.content.ActivityNotFoundException;
-import android.content.BroadcastReceiver;
-import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
-import android.os.UserManager;
-import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
+import android.graphics.Rect;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import android.view.KeyEvent;
+import android.view.View;
 import android.view.accessibility.AccessibilityEvent;
-import android.widget.Toast;
+import android.view.accessibility.AccessibilityNodeInfo;
 
+import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
- * Sends the remote's Home button to this launcher on remotes that emit KEYCODE_ALL_APPS for Home
- * (Xiaomi sticks and boxes). Android TV 9 routes that key only to the system-image launcher, so once
- * the stock launcher is disabled the button does nothing. Every other key passes through untouched.
- *
- * With stock_home_redirect set, it also sends the stock launcher's home screen back here, for firmware that turns
- * that launcher on again after it was disabled (XGIMI's xrmservice does, on its own remote keys).
- *
- * Enable over adb:
- *   settings put secure enabled_accessibility_services com.gathin.tvhome/.HomeKeyService
- *   settings put secure accessibility_enabled 1
+ * Sends the remote's Home button to this launcher on remotes that emit KEYCODE_HOME or KEYCODE_ALL_APPS,
+ * and opens the Google TV quick-settings dashboard panel on a long press of the Home button (or double tap).
+ * Also handles the Apps button (KEYCODE_ALL_APPS) and remapped remote app keys (with single/double tap).
+ * - Home single tap: returns to launcher.
+ * - Home double tap: opens Settings / Quick Settings.
+ * - Home long press: opens Dashboard panel.
+ * - Apps click: returns to launcher from other apps, does nothing while on launcher.
+ * - Apps long press: opens Google Play Store directly.
  */
 public class HomeKeyService extends AccessibilityService {
 
-    /** restore_key_services was on when the config was read: this helper is noted for ServiceRepair. */
-    private boolean repairRecord;
+    public static volatile HomeKeyService instance;
+
+    private static final long DOUBLE_TAP_MS = 300L;
+    private static final long LONG_PRESS_MS = 400L;
+
     /** Remote buttons that should open Settings (config.xml, settings_key_scancodes and settings_key_keycodes). */
     private int[] settingsScancodes = new int[0];
     private int[] settingsKeycodes = new int[0];
     private boolean settingsPanel;
-    /** app_keys, the same maps InputKeyService reads, for setups that run only this service. */
+    /** app_keys, single tap mapping (keycode -> package). */
     private Map<Integer, String> appKeys = Collections.emptyMap();
+    /** app_keys, double tap mapping (keycode -> package). */
+    private Map<Integer, String> appDoubleKeys = Collections.emptyMap();
     private Map<Integer, String> appScancodes = Collections.emptyMap();
-    private Map<Integer, String> holdAppKeys = Collections.emptyMap();
-    private Map<Integer, String> holdAppScancodes = Collections.emptyMap();
 
-    /** Waits for the user to unlock when Android binds this service at boot; null once the config is read. */
-    private BroadcastReceiver unlockReceiver;
-    /** The stock launcher's HOME activities (stock_home_redirect), disabled ones included. */
-    private final Set<String> stockHome = new HashSet<>();
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private int pendingDoubleTapKey;
+    private Runnable pendingSingleTapRunnable;
+
+    private boolean homeDown;
+    private boolean homeLongHandled;
+    private final Runnable homeLongPressRunnable = () -> {
+        if (homeDown && !homeLongHandled) {
+            homeLongHandled = true;
+            if (pendingSingleTapRunnable != null) {
+                handler.removeCallbacks(pendingSingleTapRunnable);
+                pendingDoubleTapKey = 0;
+                pendingSingleTapRunnable = null;
+            }
+            openDashboard();
+        }
+    };
+
+    private boolean appsDown;
+    private boolean appsLongHandled;
+    private final Runnable appsLongPressRunnable = () -> {
+        if (appsDown && !appsLongHandled) {
+            appsLongHandled = true;
+            openPlayStore();
+        }
+    };
+
+    private String foregroundPackage = "";
+
+    private static boolean isAllowedLauncherxActivity(String className) {
+        if (className == null) return false;
+        return className.contains("Dashboard")
+                || className.contains("Profile")
+                || className.contains("Account")
+                || className.contains("Reauth")
+                || className.contains("Lock");
+    }
+
+    private final Runnable redirectHomeRunnable = () -> {
+        if ("com.google.android.apps.tv.launcherx".equals(foregroundPackage)) {
+            openHome();
+        }
+    };
+
+    private int lastHandledNavKey = 0;
 
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
+        instance = this;
+        AccessibilityServiceInfo info = getServiceInfo();
+        if (info != null) {
+            info.flags |= AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS
+                    | AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;
+            info.eventTypes |= AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+                    | AccessibilityEvent.TYPE_WINDOWS_CHANGED;
+            setServiceInfo(info);
+        }
         settingsScancodes = getResources().getIntArray(R.array.settings_key_scancodes);
-        // The service is directBootAware: Android 11 skips a service that is not while the user is still
-        // locked at boot, writes accessibility_enabled=0 and, on TCL G03 firmware, never binds it after the
-        // unlock. Config.load reads credential-protected storage, so wait for the unlock before reading it.
-        UserManager users = getSystemService(UserManager.class);
-        if (users.isUserUnlocked()) {
-            loadConfig();
-            return;
-        }
-        unlockReceiver = new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                stopWaitingForUnlock();
-                loadConfig();
-            }
-        };
-        registerReceiver(unlockReceiver, new IntentFilter(Intent.ACTION_USER_UNLOCKED));
-        // The unlock may have happened between the check and the registration.
-        if (users.isUserUnlocked()) {
-            stopWaitingForUnlock();
-            loadConfig();
-        }
-    }
-
-    private void stopWaitingForUnlock() {
-        if (unlockReceiver == null) return;
-        unregisterReceiver(unlockReceiver);
-        unlockReceiver = null;
+        Config config = Config.load(this);
+        settingsKeycodes = config.settingsKeycodes;
+        settingsPanel = config.settingsKeyPanel;
+        RemoteKeys.applyKeyFilter(this, config.keyFilter);
+        appKeys = RemoteKeys.parseAppKeys(config.appKeys);
+        appDoubleKeys = RemoteKeys.parseDoubleTapAppKeys(config.appKeys);
+        appScancodes = RemoteKeys.parseAppScancodes(config.appKeys);
     }
 
     @Override
-    public void onDestroy() {
-        stopWaitingForUnlock();
-        super.onDestroy();
+    public boolean onUnbind(Intent intent) {
+        handler.removeCallbacks(redirectHomeRunnable);
+        instance = null;
+        return super.onUnbind(intent);
     }
 
-    private void loadConfig() {
-        // Keycodes and the panel choice can also come from a theme; theme.sh restarts this service.
-        Config config = Config.load(this);
-        // restore_key_services: note that this helper runs, so Home can put it back after a force stop. Here, not
-        // in onServiceConnected: the note is in credential-protected storage too, readable only after the unlock.
-        repairRecord = config.restoreKeyServices;
-        if (repairRecord) ServiceRepair.connected(this, getClass());
-        settingsKeycodes = config.settingsKeycodes;
-        settingsPanel = config.settingsKeyPanel;
-        appKeys = RemoteKeys.parseAppKeys(config.appKeys);
-        appScancodes = RemoteKeys.parseAppScancodes(config.appKeys);
-        RemoteKeys.applyKeyFilter(this, config.keyFilter);
-        stockHome.clear();
-        if (!config.stockHomeRedirect.isEmpty()) {
-            Intent home = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).setPackage(config.stockHomeRedirect);
-            for (ResolveInfo ri : getPackageManager().queryIntentActivities(home, PackageManager.MATCH_DISABLED_COMPONENTS)) {
-                stockHome.add(ri.activityInfo.name);
-            }
+    public static boolean standby() {
+        if (instance != null) {
+            return instance.performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN);
         }
-        // home_key_service.xml subscribes to no events, so the redirect asks for window changes only when it is on.
-        AccessibilityServiceInfo info = getServiceInfo();
-        if (info != null && !stockHome.isEmpty()) {
-            info.eventTypes |= AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED;
-            setServiceInfo(info);
-        }
-        holdAppKeys = RemoteKeys.parseHoldAppKeys(config.appKeys);
-        holdAppScancodes = RemoteKeys.parseHoldAppScancodes(config.appKeys);
+        return false;
     }
 
     private boolean isSettingsKey(KeyEvent event) {
@@ -126,56 +133,362 @@ public class HomeKeyService extends AccessibilityService {
         return false;
     }
 
+    private void openHome() {
+        Intent home = new Intent(this, MainActivity.class)
+                .setAction(Intent.ACTION_MAIN)
+                .addCategory(Intent.CATEGORY_HOME)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+        try {
+            startActivity(home);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void openSettings() {
+        if (settingsPanel) {
+            try {
+                startActivity(new Intent(this, QuickSettingsActivity.class)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                return;
+            } catch (Exception ignored) {
+            }
+        }
+        openDashboard();
+    }
+
+    private void openPlayStore() {
+        Intent play = getPackageManager().getLeanbackLaunchIntentForPackage("com.android.vending");
+        if (play == null) {
+            play = getPackageManager().getLaunchIntentForPackage("com.android.vending");
+        }
+        if (play == null) {
+            play = new Intent(Intent.ACTION_MAIN).setPackage("com.android.vending");
+        }
+        try {
+            startActivity(play.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void openDashboard() {
+        Intent dash = new Intent("android.app.action.OPEN_NOTIFICATION_HANDLER_PANEL")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            startActivity(dash);
+            return;
+        } catch (Exception ignored) {
+        }
+        if (performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)) {
+            return;
+        }
+        try {
+            startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        } catch (Exception ignored) {
+        }
+    }
+
     @Override
     protected boolean onKeyEvent(KeyEvent event) {
         // A scancode entry is more specific than any keycode, so it goes first.
-        if (RemoteKeys.handle(this, event, appScancodes.get(event.getScanCode()),
-                holdAppScancodes.get(event.getScanCode()))) return true;
-        // The stock launcher handled the remote's Settings button; with it disabled the button does nothing.
+        String scanApp = appScancodes.get(event.getScanCode());
+        if (scanApp != null) {
+            if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) RemoteKeys.launch(this, scanApp);
+            return true;
+        }
         if (isSettingsKey(event)) {
             if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) {
-                Intent open = settingsPanel ? new Intent(this, QuickSettingsActivity.class)
-                        : SystemSettings.intent(this, Settings.ACTION_SETTINGS);
-                try {
-                    startActivity(open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-                } catch (ActivityNotFoundException | SecurityException unavailable) {
-                    Toast.makeText(this, R.string.not_available, Toast.LENGTH_SHORT).show();
+                openSettings();
+            }
+            return true;
+        }
+
+        int code = event.getKeyCode();
+        String singleApp = appKeys.get(code);
+        String doubleApp = appDoubleKeys.get(code);
+
+        if (singleApp != null || doubleApp != null) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                return true;
+            }
+            if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) {
+                if (doubleApp != null) {
+                    if (pendingDoubleTapKey == code) {
+                        // Double tap!
+                        if (pendingSingleTapRunnable != null) {
+                            handler.removeCallbacks(pendingSingleTapRunnable);
+                            pendingSingleTapRunnable = null;
+                        }
+                        pendingDoubleTapKey = 0;
+                        RemoteKeys.launch(this, doubleApp);
+                    } else {
+                        // First tap
+                        if (pendingSingleTapRunnable != null) {
+                            handler.removeCallbacks(pendingSingleTapRunnable);
+                            pendingSingleTapRunnable = null;
+                        }
+                        pendingDoubleTapKey = code;
+                        pendingSingleTapRunnable = () -> {
+                            pendingDoubleTapKey = 0;
+                            pendingSingleTapRunnable = null;
+                            if (singleApp != null) {
+                                RemoteKeys.launch(this, singleApp);
+                            }
+                        };
+                        handler.postDelayed(pendingSingleTapRunnable, DOUBLE_TAP_MS);
+                    }
+                } else if (singleApp != null) {
+                    // No double tap configured for this key: execute immediately
+                    if (pendingSingleTapRunnable != null) {
+                        handler.removeCallbacks(pendingSingleTapRunnable);
+                        pendingSingleTapRunnable = null;
+                        pendingDoubleTapKey = 0;
+                    }
+                    RemoteKeys.launch(this, singleApp);
                 }
             }
             return true;
         }
-        if (RemoteKeys.handle(this, event, appKeys.get(event.getKeyCode()),
-                holdAppKeys.get(event.getKeyCode()))) return true;
+
         if (event.getKeyCode() != KeyEvent.KEYCODE_ALL_APPS) return false;
-        if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) {
-            Intent home = new Intent(Intent.ACTION_MAIN)
-                    .addCategory(Intent.CATEGORY_HOME)
-                    .setPackage(getPackageName())
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
-            startActivity(home);
+        // Apps button (KEYCODE_ALL_APPS):
+        if (code == KeyEvent.KEYCODE_ALL_APPS) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                if (event.getRepeatCount() == 0) {
+                    appsDown = true;
+                    appsLongHandled = false;
+                    handler.removeCallbacks(appsLongPressRunnable);
+                    handler.postDelayed(appsLongPressRunnable, LONG_PRESS_MS);
+                } else if (!appsLongHandled) {
+                    appsLongHandled = true;
+                    handler.removeCallbacks(appsLongPressRunnable);
+                    openPlayStore();
+                }
+                return true;
+            }
+            if (event.getAction() == KeyEvent.ACTION_UP) {
+                handler.removeCallbacks(appsLongPressRunnable);
+                boolean shouldAct = appsDown && !appsLongHandled && !event.isCanceled();
+                appsDown = false;
+                appsLongHandled = false;
+                if (shouldAct) {
+                    // Click while in launcher: do nothing. Click while in another app: go home.
+                    if (!getPackageName().equals(foregroundPackage)) {
+                        openHome();
+                    }
+                }
+                return true;
+            }
+            return true;
         }
-        return true;
+
+        // Home button (KEYCODE_HOME):
+        if (code == KeyEvent.KEYCODE_HOME) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                if (event.getRepeatCount() == 0) {
+                    homeDown = true;
+                    homeLongHandled = false;
+                    handler.removeCallbacks(homeLongPressRunnable);
+                    handler.postDelayed(homeLongPressRunnable, LONG_PRESS_MS);
+                } else if (!homeLongHandled) {
+                    homeLongHandled = true;
+                    handler.removeCallbacks(homeLongPressRunnable);
+                    if (pendingSingleTapRunnable != null) {
+                        handler.removeCallbacks(pendingSingleTapRunnable);
+                        pendingDoubleTapKey = 0;
+                        pendingSingleTapRunnable = null;
+                    }
+                    openDashboard();
+                }
+                return true;
+            }
+            if (event.getAction() == KeyEvent.ACTION_UP) {
+                handler.removeCallbacks(homeLongPressRunnable);
+                boolean shouldAct = homeDown && !homeLongHandled && !event.isCanceled();
+                homeDown = false;
+                homeLongHandled = false;
+                if (shouldAct) {
+                    if (pendingDoubleTapKey == KeyEvent.KEYCODE_HOME) {
+                        // Double tap on Home: open Settings / Quick Settings!
+                        if (pendingSingleTapRunnable != null) {
+                            handler.removeCallbacks(pendingSingleTapRunnable);
+                            pendingSingleTapRunnable = null;
+                        }
+                        pendingDoubleTapKey = 0;
+                        openSettings();
+                    } else {
+                        // First tap: delay by DOUBLE_TAP_MS to check for double tap
+                        if (pendingSingleTapRunnable != null) {
+                            handler.removeCallbacks(pendingSingleTapRunnable);
+                            pendingSingleTapRunnable = null;
+                        }
+                        pendingDoubleTapKey = KeyEvent.KEYCODE_HOME;
+                        pendingSingleTapRunnable = () -> {
+                            pendingDoubleTapKey = 0;
+                            pendingSingleTapRunnable = null;
+                            openHome();
+                        };
+                        handler.postDelayed(pendingSingleTapRunnable, DOUBLE_TAP_MS);
+                    }
+                }
+                return true;
+            }
+            return true;
+        }
+
+        if ("com.google.android.apps.tv.launcherx".equals(foregroundPackage)) {
+            if (handleDashboardNavigation(event)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
-    /** Unbound by Android: the user turned the helper off, so Home doesn't put it back (ServiceRepair). */
-    @Override
-    public boolean onUnbind(Intent intent) {
-        if (repairRecord) ServiceRepair.disconnected(this, getClass());
-        return super.onUnbind(intent);
+    private boolean handleDashboardNavigation(KeyEvent event) {
+        int code = event.getKeyCode();
+        if (code != KeyEvent.KEYCODE_DPAD_UP && code != KeyEvent.KEYCODE_DPAD_DOWN
+                && code != KeyEvent.KEYCODE_DPAD_LEFT && code != KeyEvent.KEYCODE_DPAD_RIGHT
+                && code != KeyEvent.KEYCODE_DPAD_CENTER && code != KeyEvent.KEYCODE_ENTER) {
+            return false;
+        }
+
+        if (event.getAction() == KeyEvent.ACTION_UP) {
+            if (lastHandledNavKey == code) {
+                lastHandledNavKey = 0;
+                return true;
+            }
+            return false;
+        }
+
+        if (event.getAction() != KeyEvent.ACTION_DOWN) {
+            return false;
+        }
+
+        AccessibilityNodeInfo focused = findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
+        if (focused == null) return false;
+
+        try {
+            CharSequence desc = focused.getContentDescription();
+            CharSequence text = focused.getText();
+            boolean isHelp = (desc != null && desc.toString().toLowerCase().contains("help"))
+                    || (text != null && text.toString().toLowerCase().contains("help"));
+
+            if (isHelp) {
+                if (code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_LEFT) {
+                    Rect helpBounds = new Rect();
+                    focused.getBoundsInScreen(helpBounds);
+                    AccessibilityNodeInfo root = getRootInActiveWindow();
+                    if (root != null) {
+                        try {
+                            AccessibilityNodeInfo candidate = findLowestFocusableAbove(root, helpBounds.top);
+                            if (candidate != null) {
+                                try {
+                                    boolean ok = candidate.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
+                                    if (ok) {
+                                        lastHandledNavKey = code;
+                                        return true;
+                                    }
+                                } finally {
+                                    candidate.recycle();
+                                }
+                            }
+                        } finally {
+                            root.recycle();
+                        }
+                    }
+                } else if (code == KeyEvent.KEYCODE_DPAD_DOWN || code == KeyEvent.KEYCODE_DPAD_RIGHT
+                        || code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER) {
+                    lastHandledNavKey = code;
+                    return true;
+                }
+            } else if (code == KeyEvent.KEYCODE_DPAD_DOWN) {
+                AccessibilityNodeInfo nextDown = focused.focusSearch(View.FOCUS_DOWN);
+                if (nextDown != null) {
+                    try {
+                        CharSequence nextDesc = nextDown.getContentDescription();
+                        CharSequence nextText = nextDown.getText();
+                        if ((nextDesc != null && nextDesc.toString().toLowerCase().contains("help"))
+                                || (nextText != null && nextText.toString().toLowerCase().contains("help"))) {
+                            // Don't descend into dead footer Help & feedback icon
+                            lastHandledNavKey = code;
+                            return true;
+                        }
+                    } finally {
+                        nextDown.recycle();
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        } finally {
+            focused.recycle();
+        }
+
+        return false;
+    }
+
+    private AccessibilityNodeInfo findLowestFocusableAbove(AccessibilityNodeInfo node, int maxBottom) {
+        if (node == null) return null;
+        AccessibilityNodeInfo best = null;
+        Rect bestBounds = new Rect();
+
+        List<AccessibilityNodeInfo> queue = new ArrayList<>();
+        queue.add(AccessibilityNodeInfo.obtain(node));
+
+        Rect r = new Rect();
+        while (!queue.isEmpty()) {
+            AccessibilityNodeInfo current = queue.remove(0);
+            if (current.isFocusable()) {
+                current.getBoundsInScreen(r);
+                if (r.bottom <= maxBottom && r.width() > 0 && r.height() > 0) {
+                    if (best == null || r.bottom > bestBounds.bottom
+                            || (r.bottom == bestBounds.bottom && r.right > bestBounds.right)) {
+                        if (best != null) best.recycle();
+                        best = AccessibilityNodeInfo.obtain(current);
+                        bestBounds.set(r);
+                    }
+                }
+            }
+            int childCount = current.getChildCount();
+            for (int i = 0; i < childCount; i++) {
+                AccessibilityNodeInfo child = current.getChild(i);
+                if (child != null) {
+                    queue.add(child);
+                }
+            }
+            current.recycle();
+        }
+        return best;
     }
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
-        // stock_home_redirect: the firmware turned the stock launcher back on and its home screen came up.
-        if (stockHome.isEmpty() || event.getEventType() != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return;
+        if (event == null) return;
+        CharSequence pkg = event.getPackageName();
         CharSequence cls = event.getClassName();
-        if (cls != null && stockHome.contains(cls.toString())) {
-            startActivity(new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).setPackage(getPackageName())
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED));
+        if (pkg != null) {
+            foregroundPackage = pkg.toString();
+        }
+
+        if (pkg != null && cls != null && "com.google.android.apps.tv.launcherx".contentEquals(pkg)) {
+            String className = cls.toString();
+            if (isAllowedLauncherxActivity(className)) {
+                handler.removeCallbacks(redirectHomeRunnable);
+            } else if (className.contains("HomeActivity")) {
+                handler.removeCallbacks(redirectHomeRunnable);
+                handler.postDelayed(redirectHomeRunnable, 400L);
+            }
         }
     }
 
     @Override
     public void onInterrupt() {
+        handler.removeCallbacks(homeLongPressRunnable);
+        handler.removeCallbacks(appsLongPressRunnable);
+        handler.removeCallbacks(redirectHomeRunnable);
+        if (pendingSingleTapRunnable != null) {
+            handler.removeCallbacks(pendingSingleTapRunnable);
+            pendingDoubleTapKey = 0;
+            pendingSingleTapRunnable = null;
+        }
     }
 }

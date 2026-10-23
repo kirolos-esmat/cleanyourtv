@@ -9,13 +9,9 @@ import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.content.IntentFilter;
-import android.content.pm.PackageManager;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.ResolveInfo;
-import android.content.pm.ChangedPackages;
-import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -44,6 +40,7 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
+import android.os.StatFs;
 import android.os.SystemClock;
 import android.provider.Settings;
 import android.text.SpannableString;
@@ -51,6 +48,7 @@ import android.text.Spanned;
 import android.text.TextPaint;
 import android.text.TextUtils;
 import android.text.style.ForegroundColorSpan;
+import android.util.LruCache;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.KeyEvent;
@@ -64,7 +62,6 @@ import android.view.animation.LayoutAnimationController;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.RelativeLayout;
 import android.widget.PopupWindow;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -98,7 +95,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private static final int LAUNCHER_SETTINGS_REQUEST = 42;
     /** Sent by QuickSettingsActivity: open Launcher settings from here so Home rebuilds when they close. */
     static final String ACTION_LAUNCHER_SETTINGS = "com.gathin.tvhome.action.LAUNCHER_SETTINGS";
-    /** The system input switcher, forwarded here by InputsRequestActivity while handle_view_inputs is on. */
     static final String ACTION_VIEW_INPUTS = "com.android.tv.action.VIEW_INPUTS";
     /** Tiles per row and dock slots (res/values/config.xml, columns). Set in onCreate. */
     static int COLUMNS = 4;
@@ -111,23 +107,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      */
     private static final long TIME_VALID_AFTER_MS = 1_735_689_600_000L;
     private String liveTvPkg;
-    /** Launcher settings' change count this Home was built with (see onResume). */
-    private long settingsRevision;
     /** Idle time on Home before ClockActivity; 0 is off (config.xml, home_idle_clock_minutes). */
     private long idleClockMs;
     private final Runnable showIdleClock = () -> startActivity(new Intent(this, ClockActivity.class));
     private String liveTvAction;
-    private String liveTvInputId;
-    /** The app library is on (config.xml, app_library): only then can the tile menu take an app off Home. */
-    private boolean appLibraryEnabled;
-    /** The same opt-in menu is available from either hold-OK or the remote's Menu key. */
-    private boolean tileMenuEnabled;
     private String inputAction;
-    private String inputUriScheme;
     private String sourcePanelService;
     private String sourcePanelAction;
-    private String sourcePanelExtra;
-    private boolean coocaaSources;
 
     private AppAdapter adapter;
     private RecyclerView grid;
@@ -145,14 +131,17 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** config.xml ambient_glow, overridable by a theme. Off: the glow view is gone and no fade or colour animator
      *  is started for it, so a focus move costs nothing extra on a launcher that runs all day. */
     private boolean ambientGlow;
-    /** config.xml app_glow: the highlight takes the focused app's colour on every tile. */
-    private boolean appGlow;
-    /** config.xml glow_style: the shape setAmbient paints the glow mask in. */
-    private String glowStyle;
     private ImageView heroArt;
     private static final float HERO_ART_ALPHA = 0.5f;
     /** Softened artwork per app (HeroArt, about 5 KB each), made the first time its dock tile is focused. */
-    private final Map<String, Bitmap> heroArtCache = new HashMap<>();
+    private final LruCache<String, Bitmap> heroArtCache = new LruCache<String, Bitmap>(24) {
+        @Override
+        protected void entryRemoved(boolean evicted, String key, Bitmap oldValue, Bitmap newValue) {
+            if (evicted && oldValue != null && !oldValue.isRecycled()) {
+                oldValue.recycle();
+            }
+        }
+    };
     /** The app whose artwork heroArt shows, so focusing it again only fades it back in. */
     private String heroArtKey;
     /** The focus glow's colour while the cinematic shelf tints it, 0 for plain white glass. */
@@ -165,8 +154,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private TextView greeting;
     private View clockBlock;
     private View btnInputs;
-    /** config show_inputs_pill: false keeps the Inputs pill hidden even when the TV has inputs. */
-    private boolean showInputsPill = true;
     private TextView btnWifi;
     /** The network pill's icon as last set, so a refresh that changes nothing does not lay the top bar out again. */
     private int wifiIcon;
@@ -174,6 +161,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean pillsShown;
     private TextView shamsiDate;
     private TextView stats;
+    private TextView weather;
+    private Config config;
     private List<RaceWeekend.Race> raceCalendar;
     private View racePanel;
     private TextView raceKicker, raceHeadline, raceSessions;
@@ -209,8 +198,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean reducedMotion;
     /** config.xml dock_row: the first row is a separate dock (band, parked low, top shelf) rather than plain grid. */
     private boolean dockRow;
-    /** The highlight springs past its target (config.xml, focus_overshoot); false goes straight there. */
-    private boolean focusOvershoot;
     /** Festive skin from the theme (see Festival); applied while it is active today. */
     private Festival festival = Festival.NONE;
     private boolean festive;
@@ -220,40 +207,30 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private int greetingColor;
     /** The day the petal shower last played, so it greets the first Home of each day only. */
     private static LocalDate lastPetalShower;
-    /** boot_to_live_tv: open the Live TV app on the first Home of each boot. */
-    private boolean bootToLiveTv;
     /** hidden_apps as the adapter sees them (config.xml or a theme's config.json): a hidden app gets no card either. */
     private Set<String> hiddenApps = Collections.emptySet();
     private List<Cards.Card> cards = Collections.emptyList();
     /** The grid has been laid out and focused since the last resume; the card prompt waits for this. */
     private boolean tilesReady;
-    private boolean settingsRecreationPending;
     private Dialog cardPrompt;
     /** Set when a decision could not be saved: no more prompts until the next resume, instead of asking in a loop. */
     private boolean promptsPaused;
+    /** Rebuild the tiles on resume: Home was fully hidden by an app, or Home was pressed. Not after a side panel such as Wi-Fi settings. */
+    private boolean rebuildOnResume = true;
     /** Between onStop and onStart: Home was fully covered by an app, not just by the translucent quick panel. */
     private boolean stopped;
     /** Between onStart and onStop: Home is (at least partly) on screen. */
     private boolean started;
-    /** Rebuild the tiles on the way back to Home only when apps changed meanwhile (TileRefresh). */
-    private final TileRefresh tileRefresh = new TileRefresh();
-    /** PackageManager's change counter at the last rebuild, to catch a package broadcast that never arrived. */
-    private int packageSequence;
     /** The Inputs or Module cards dropdown while one is open, so onPause can close it. */
     private PopupWindow openPopup;
     /** Reorder mode is on (top-bar button). */
     private boolean reordering;
     /** Key of the tile being carried in reorder mode, or null. */
     private String movingKey;
+    private boolean singleTileMove;
+    private boolean okDownSeen;
     /** Tile order when reorder mode started, to save only when something moved. */
     private List<String> orderAtStart;
-    /**
-     * fill_dock false: tiles in the dock when reorder mode started, plus those carried or swapped into it since
-     * (#499). A grid app that only slid into a free slot, which reorder mode does not show, is not one of them.
-     */
-    private Set<String> dockInSession;
-    /** fill_dock false: how many dock slots held an app when reorder mode started. */
-    private int dockedAtStart;
     private View btnReorder;
     /** dock_apps as loaded (config.xml or a theme): a saved Order only applies while these are unchanged. */
     private List<String> dockApps;
@@ -263,8 +240,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean dockEditing;
     /** Dock place being changed in edit-dock mode, or -1 while the place is still being chosen. */
     private int dockEditSlot = -1;
-    /** Tile menu's "Add to dock": the app waiting for a dock place in edit-dock mode, or null. */
-    private String dockEditAppKey;
     private AppLibraryDialog appLibrary;
     private boolean libraryFocusPending;
     private RecyclerView.OnScrollListener pendingFocusScroll;
@@ -313,8 +288,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             // Updates send REMOVED followed by ADDED; keep the tile until the new APK is ready.
             if (Intent.ACTION_PACKAGE_REMOVED.equals(intent.getAction())
                     && intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)) return;
-            // In the background this only marks the tiles stale; onResume rebuilds them once.
-            if (!tileRefresh.onPackagesChanged()) return;
             reloadApps(false);
             if (appLibrary != null) appLibrary.refresh();
         }
@@ -331,10 +304,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         @Override
         public void run() {
             updateGreeting();
+            updateWeather();
             updateRace();
-            // The pill follows the network callbacks and each return to Home; only the diya's flame follows the
-            // signal level, so only it needs this minute's binder calls (about 7 ms on the UI thread).
-            if (festive) updateWifiLabel();
             sky.update();
             wallpaperPlayer.update();
             handler.postDelayed(this, MINUTE_MS);
@@ -348,11 +319,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         density = getResources().getDisplayMetrics().density;
         // config.xml, overlaid by config.json from a pushed theme (see Config and tools/theme.sh).
         Config cfg = Config.load(this);
-        // restore_key_services: after a force stop, put back the remote's accessibility helpers that Android took
-        // off the list (needs WRITE_SECURE_SETTINGS, granted by build-and-install with RESTORE_KEY_SERVICES=1).
-        if (cfg.restoreKeyServices) ServiceRepair.restore(this);
-        settingsRevision = settingsRevision();
-        applyViewInputsHandler(cfg.handleViewInputs);
         settingsKeycodes = cfg.settingsKeycodes;
         settingsKeyPanel = cfg.settingsKeyPanel;
         COLUMNS = cfg.columns;
@@ -360,22 +326,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         advancedEffects = cfg.animations && cfg.advancedEffects;
         reducedMotion = cfg.reducedMotion;
         dockRow = cfg.dockRow;
-        focusOvershoot = cfg.focusOvershoot;
         festival = cfg.festival;
         festive = festival.active(LocalDate.now());
         liveTvPkg = cfg.liveTvPackage;
         idleClockMs = cfg.homeIdleClockMinutes * MINUTE_MS;
-        bootToLiveTv = cfg.bootToLiveTv;
         liveTvAction = cfg.liveTvAction;
-        liveTvInputId = cfg.liveTvInputId;
-        appLibraryEnabled = cfg.appLibrary;
-        tileMenuEnabled = cfg.tileMenu;
         inputAction = cfg.inputAction;
-        inputUriScheme = cfg.inputUriScheme;
         sourcePanelService = cfg.sourcePanelService;
         sourcePanelAction = cfg.sourcePanelAction;
-        sourcePanelExtra = cfg.sourcePanelExtra;
-        coocaaSources = cfg.coocaaSources;
 
         root = findViewById(R.id.root);
         root.setBackgroundColor(cfg.backgroundColor);
@@ -393,8 +351,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // a fade renders it into a full-screen offscreen buffer first.
         ambient.forceHasOverlappingRendering(false);
         ambientGlow = cfg.ambientGlow;
-        appGlow = cfg.appGlow;
-        if (!ambientGlow) ambient.setVisibility(View.GONE);
+        if (!ambientGlow) {
+            ambient.setVisibility(View.GONE);
+            ambient.setAlpha(0f);
+        }
         heroName = findViewById(R.id.heroName);
         hero = findViewById(R.id.hero);
         // The hero is now a group (name, and the cinematic lines): without this every fade of the default
@@ -404,27 +364,17 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         heroDots = findViewById(R.id.heroDots);
         heroArt = findViewById(R.id.heroArt);
         cinematic = cfg.cinematicHome;
-        glowStyle = cfg.glowStyle;
-        if (cinematic) setUpCinematicShelf();
+        setUpHeroShelf();
         // dock_title false: the name above the dock (and the cinematic lines under it) never shows; the glow
         // still follows the dock.
         if (!cfg.dockTitle) hero.setVisibility(View.GONE);
         greeting = findViewById(R.id.greeting);
         clockBlock = findViewById(R.id.leftBlock);
         greetingColor = greeting.getCurrentTextColor();
-        if (getResources().getBoolean(R.bool.rtl_menu_bar)) {
-            // Center Hebrew greetings over the numeric time, independent of a visible AM/PM label.
-            findViewById(R.id.clock).addOnLayoutChangeListener((v, l, t, right, bottom, ol, ot, or, ob) -> {
-                ViewGroup.LayoutParams params = greeting.getLayoutParams();
-                if (params.width != right - l) {
-                    params.width = right - l;
-                    greeting.setLayoutParams(params);
-                }
-                greeting.setTranslationX(l);
-            });
-        }
         btnWifi = findViewById(R.id.btnWifi);
         shamsiDate = findViewById(R.id.shamsiDate);
+        weather = findViewById(R.id.weather);
+        this.config = cfg;
         stats = findViewById(R.id.stats);
         raceCalendar = cfg.raceCalendar;
         racePanel = findViewById(R.id.racePanel);
@@ -445,6 +395,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         hiddenApps = new HashSet<>(cfg.hiddenApps);
 
         grid = findViewById(R.id.grid);
+        int dockSidePad = (int) (14 * density);
+        grid.setPadding(dockSidePad, grid.getPaddingTop(), dockSidePad, grid.getPaddingBottom());
         rtlAppGrid = getResources().getBoolean(R.bool.rtl_app_grid);
         // Mirror only the app grid; the header and other locales keep their own layouts.
         grid.setLayoutManager(new GridLayoutManager(this, COLUMNS) {
@@ -500,17 +452,17 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             public void onChildViewDetachedFromWindow(@NonNull View v) {
             }
         });
-        if (dockRow) grid.addItemDecoration(new DockDecoration(COLUMNS, density, cinematic, cfg.alwaysShowNames, cfg.dockOpacity, cfg.dockGlass, cfg.dockEvenPadding));
-        // Reduced motion: the tiles are simply there, with no entrance (reloadApps skips it there too).
-        if (animations && !reducedMotion) {
-            grid.setLayoutAnimation(new LayoutAnimationController(
-                    AnimationUtils.loadAnimation(this, R.anim.tile_enter), 0.06f));
-        }
         adapter = new AppAdapter(this, this, COLUMNS, cfg);
         dockApps = cfg.dockApps;
         fillDockLeavesSlots = !cfg.fillDock;
-        Order savedOrder = Order.load(Order.file(this));
-        adapter.setSavedOrder(Order.ranks(savedOrder, dockApps), Order.docked(savedOrder, dockApps));
+        adapter.setSavedOrder(Order.ranks(Order.load(Order.file(this)), dockApps), Order.docked(Order.load(Order.file(this)), dockApps));
+        if (dockRow) grid.addItemDecoration(new DockDecoration(COLUMNS, density, cinematic, cfg.alwaysShowNames, cfg.dockOpacity, cfg.dockGlass, cfg.dockEvenPadding));
+        if (animations) {
+            int enterAnim = R.anim.tile_enter;
+            float enterDelay = reducedMotion ? 0f : 0.06f;
+            grid.setLayoutAnimation(new LayoutAnimationController(
+                    AnimationUtils.loadAnimation(this, enterAnim), enterDelay));
+        }
         grid.setAdapter(adapter);
 
         // tvOS layout: push the dock row towards the bottom of the screen, leaving room for
@@ -533,8 +485,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (MainActivity.this.dockRow && cfg.dockTitle && rowsBelowDock > 0) want = Math.max(want, (int) (AppAdapter.TITLE_ROOM_DP * density));
             // No dock to push down: the grid starts at the top, with room for the first row's zoom and glass.
             if (!MainActivity.this.dockRow) want = (int) (AppAdapter.TOP_ROOM_DP * density);
-            if (grid.getPaddingTop() != want) {
-                grid.setPadding(grid.getPaddingLeft(), want, grid.getPaddingRight(), grid.getPaddingBottom());
+            int sidePad = (int) (14 * density);
+            if (grid.getPaddingTop() != want || grid.getPaddingLeft() != sidePad || grid.getPaddingRight() != sidePad) {
+                grid.setPadding(sidePad, want, sidePad, grid.getPaddingBottom());
             }
             // Cold start or column count > 4: the first focus can run before the grid has its final width or
             // padding, leaving the glass at the XML design size until a key is pressed.
@@ -567,10 +520,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         });
         for (SpringAnimation s : new SpringAnimation[]{springX, springY}) {
             if (reducedMotion) {
-                Motion.reduce(s);
-            } else if (!focusOvershoot) {
-                // Critically damped: glides straight onto the tile without swinging past it.
-                s.setSpring(new SpringForce().setStiffness(advancedEffects ? 520f : 440f).setDampingRatio(1f));
+                // Stiff and almost critically damped: settles in a few frames instead of oscillating,
+                // and stops once the highlight is within 1.5 px of its tile.
+                s.setSpring(new SpringForce().setStiffness(1400f).setDampingRatio(0.95f));
+                s.setMinimumVisibleChange(1.5f);
             } else {
                 s.setSpring(new SpringForce().setStiffness(advancedEffects ? 320f : 260f)
                         .setDampingRatio(advancedEffects ? 0.76f : 0.58f));
@@ -580,26 +533,36 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         btnInputs = findViewById(R.id.btnInputs);
         View btnSettings = findViewById(R.id.btnSettings);
         btnInputs.setOnClickListener(v -> showInputs());
+        btnInputs.setOnLongClickListener(v -> {
+            Intent liveTv = liveTvIntent();
+            if (liveTv == null) {
+                for (String p : new String[]{"com.mitv.tvhome.mitvplus", "com.nst.iptvsmarterstvbox", "com.nostalgiatv.nostalgia_tv"}) {
+                    Intent i = getPackageManager().getLeanbackLaunchIntentForPackage(p);
+                    if (i == null) i = getPackageManager().getLaunchIntentForPackage(p);
+                    if (i != null) {
+                        liveTv = i;
+                        break;
+                    }
+                }
+            }
+            if (liveTv != null) {
+                open(liveTv);
+                return true;
+            }
+            return false;
+        });
         btnWifi.setOnClickListener(v -> openNetworkPill());
         btnWifi.setOnLongClickListener(v -> {
             open(systemIntent(Settings.ACTION_WIFI_SETTINGS));
             return true;
         });
-        launcherSettingsButton = cfg.launcherSettingsButton;
-        if (launcherSettingsButton) {
-            ((TextView) btnSettings).setText(R.string.launcher_settings);
-            ((TextView) btnSettings).setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_home_settings_pill, 0, 0, 0);
-        }
-        btnSettings.setOnClickListener(v -> {
-            if (launcherSettingsButton) startActivityForResult(
-                    new Intent(this, LauncherSettingsActivity.class), LAUNCHER_SETTINGS_REQUEST);
-            else open(systemIntent(Settings.ACTION_SETTINGS));
-        });
+        View btnControlCenter = findViewById(R.id.btnControlCenter);
+        if (btnControlCenter != null) btnControlCenter.setOnClickListener(v -> showControlCenter());
+        btnSettings.setOnClickListener(v -> open(systemIntent(Settings.ACTION_SETTINGS)));
         btnReorder = findViewById(R.id.btnReorder);
         btnReorder.setOnClickListener(v -> toggleReorder());
         btnReorder.setVisibility(cfg.reorderButton ? View.VISIBLE : View.GONE);
         if (!cfg.showNetworkPill) btnWifi.setVisibility(View.GONE);
-        showInputsPill = cfg.showInputsPill;
         btnLibraryTop = findViewById(R.id.btnLibraryTop);
         btnLibraryTop.setOnClickListener(v -> {
             onLibraryRequested();
@@ -607,29 +570,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         });
         btnLibraryTop.setVisibility(cfg.libraryButton && cfg.appLibrary ? View.VISIBLE : View.GONE);
         iconOnlyButtons = cfg.iconOnlyButtons;
-        topMenu = cfg.topMenu;
         wifiIconOnly = iconOnlyButtons && cfg.wifiLabelWidth <= 0;
-        if (cfg.topMenu) {
-            // One gear: Inputs and Wi-Fi move into its dropdown. The Wi-Fi pill stays hidden but keeps its
-            // label up to date, which the menu's Wi-Fi row shows.
-            showInputsPill = false;
-            btnInputs.setVisibility(View.GONE);
-            btnWifi.setVisibility(View.GONE);
-            ((TextView) btnSettings).setText(R.string.settings);
-            ((TextView) btnSettings).setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_settings, 0, 0, 0);
-            if (!iconOnlyButtons) makeIconOnly((TextView) btnSettings);
-            btnSettings.setOnClickListener(v -> showTopMenu());
-            // The lone gear sits at the header's middle, not on its bottom line like the row of pills.
-            LinearLayout topButtons = findViewById(R.id.topButtons);
-            RelativeLayout.LayoutParams tlp = (RelativeLayout.LayoutParams) topButtons.getLayoutParams();
-            tlp.addRule(RelativeLayout.ALIGN_TOP, R.id.leftBlock);
-            tlp.bottomMargin = 0;
-            topButtons.setLayoutParams(tlp);
-            topButtons.setGravity(Gravity.CENTER_VERTICAL);
-        }
         if (iconOnlyButtons) {
             if (cfg.wifiLabelWidth > 0) btnWifi.setMaxWidth(Math.round(cfg.wifiLabelWidth * density));
             else makeIconOnly(btnWifi);
+            if (btnControlCenter instanceof TextView) makeIconOnly((TextView) btnControlCenter);
             makeIconOnly((TextView) btnSettings);
         }
         if (cfg.iconOnlyInputs) makeIconOnly((TextView) btnInputs);
@@ -664,7 +609,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             for (View button : new View[]{btnInputs, btnWifi, btnReorder, btnLibraryTop, btnSettings}) {
                 button.setOnFocusChangeListener((view, focused) -> view.animate()
                         .scaleX(focused ? 1.04f : 1f).scaleY(focused ? 1.04f : 1f)
-                        .setDuration(reducedMotion ? Motion.REDUCED_MS : 160).start());
+                        .setDuration(160).start());
             }
         }
         if (festive) applyFestiveSkin((TextView) btnInputs, (TextView) btnSettings);
@@ -680,13 +625,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         packageFilter.addAction(Intent.ACTION_PACKAGE_CHANGED);
         packageFilter.addDataScheme("package");
         timeFilter.addAction(Intent.ACTION_TIMEZONE_CHANGED);
-        // Registered for the activity's whole life, not only while it is started: an app installed or updated while
-        // another app is in front must still mark the tiles stale, or Home would have to rebuild on every return.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(packageReceiver, packageFilter, Context.RECEIVER_NOT_EXPORTED);
-        } else {
-            registerReceiver(packageReceiver, packageFilter);
-        }
 
         ConnectivityManager cm = getSystemService(ConnectivityManager.class);
         TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
@@ -699,50 +637,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     .build(), vpnCallback);
         }
         // Not after recreate(): the launch intent survives it and would open the settings again.
-        if (savedInstanceState == null && !openLauncherSettingsIfAsked(getIntent())) openInputsIfAsked(getIntent());
-    }
-
-    /**
-     * handle_view_inputs: switch InputsRequestActivity, the VIEW_INPUTS handler, on or off. It is disabled in the
-     * manifest, so a TV with its own input picker never sees it; only the sets that need it turn it on. Written
-     * only when the state differs, so an ordinary start does not touch the package manager.
-     */
-    private void applyViewInputsHandler(boolean on) {
-        ComponentName handler = new ComponentName(this, InputsRequestActivity.class);
-        PackageManager pm = getPackageManager();
-        int want = on ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED : PackageManager.COMPONENT_ENABLED_STATE_DEFAULT;
-        if (pm.getComponentEnabledSetting(handler) != want) {
-            pm.setComponentEnabledSetting(handler, want, PackageManager.DONT_KILL_APP);
-        }
-    }
-
-    /**
-     * VIEW_INPUTS, forwarded by InputsRequestActivity while handle_view_inputs is on: open the Inputs menu once
-     * the pill is on screen. The intent is replaced so a later recreate() does not
-     * open it again. Nothing to do when the TV has no inputs to list (the pill is hidden then).
-     */
-    private boolean openInputsIfAsked(Intent intent) {
-        if (intent == null || !ACTION_VIEW_INPUTS.equals(intent.getAction())) return false;
-        setIntent(new Intent(Intent.ACTION_MAIN));
-        if (btnInputs.getVisibility() != View.VISIBLE) return true;
-        if (btnInputs.isLaidOut()) {
-            btnInputs.requestFocus();
-            showInputs();
-            return true;
-        }
-        // Cold start: the popup anchors to the pill, so wait for the first layout.
-        btnInputs.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
-            @Override
-            public void onGlobalLayout() {
-                btnInputs.getViewTreeObserver().removeOnGlobalLayoutListener(this);
-                btnInputs.post(() -> {
-                    if (isFinishing() || btnInputs.getVisibility() != View.VISIBLE) return;
-                    btnInputs.requestFocus();
-                    showInputs();
-                });
-            }
-        });
-        return true;
+        if (savedInstanceState == null) openLauncherSettingsIfAsked(getIntent());
     }
 
     private boolean openLauncherSettingsIfAsked(Intent intent) {
@@ -761,13 +656,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         if (openLauncherSettingsIfAsked(intent)) return;
-        if (openInputsIfAsked(intent)) return;
         if (intent == null || !intent.hasCategory(Intent.CATEGORY_HOME)) return;
         grid.scrollToPosition(0);
         lastFocused = 0;
         lastFocusedKey = adapter.getItemCount() > 0 ? adapter.keyAt(0) : null;
         if (stopped) {
-            tileRefresh.onHomeAgain();
+            rebuildOnResume = true;
         } else {
             // Still on screen (the quick panel was over it, or Home was already in front): the tiles are current,
             // so only go back to the first one; rebuilding would replay the entrance animation for nothing.
@@ -781,12 +675,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         stopped = false;
         started = true;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(packageReceiver, packageFilter, Context.RECEIVER_NOT_EXPORTED);
             registerReceiver(timeReceiver, timeFilter, Context.RECEIVER_NOT_EXPORTED);
         } else {
+            registerReceiver(packageReceiver, packageFilter);
             registerReceiver(timeReceiver, timeFilter);
         }
         updateClockVisibility();
-        tileRefresh.onStart();
     }
 
     @Override
@@ -797,31 +692,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             recreate();
             return;
         }
-        // Something changed in Launcher settings: rebuild with it, however the settings were left. Only Back
-        // delivered their RESULT_OK; Home (the remote's button) clears them off this task and the result comes
-        // back cancelled, so a new wallpaper or layout waited for the next process start.
-        if (Config.settingsChanged(settingsRevision, settingsRevision())) {
-            recreate();
-            return;
-        }
         restartIdleClock();
         promptsPaused = false;
         if (grid.getAdapter() == null) grid.setAdapter(adapter);   // dropped by onTrimMemory
-        switch (tileRefresh.onResume(packagesChangedSinceRebuild())) {
-            case REBUILD:
-                tilesReady = false;
-                reloadApps(true);
-                break;
-            case REFOCUS:
-                // The same tiles: only the focus goes back, as after a rebuild, without replaying the entrance.
-                tilesReady = false;
-                reloadApps(true, false, false);
-                break;
-            default:
-                break;
+        if (rebuildOnResume) {
+            tilesReady = false;
+            reloadApps(true);
         }
-        if (openLiveTvAfterBoot()) return;
+        rebuildOnResume = false;
         updateGreeting();
+        updateWeather();
         updateRace();
         // The network and Inputs pills keep their state while Home is in the background, and callbacks update them
         // when the network or the inputs change, so this refresh only catches anything missed. Its binder calls
@@ -837,6 +717,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (showStats) startStats();
         sky.update();
         wallpaperPlayer.start();
+        resetScreensaverTimer();
+        handler.removeCallbacks(minuteTick);
         handler.postDelayed(minuteTick, MINUTE_MS);
         if (festive && diya != null) {
             diya.start();
@@ -848,50 +730,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
     }
 
-    /** Launcher settings' change count (Config.SETTINGS_REVISION_KEY); onResume rebuilds Home when it moved. */
-    private long settingsRevision() {
-        return getSharedPreferences(Config.SETTINGS_NAME, MODE_PRIVATE).getLong(Config.SETTINGS_REVISION_KEY, 0);
-    }
-
-    /**
-     * Only "Reorder tiles" in Launcher settings still answers with a result: Home rebuilds (the saved choices are
-     * reloaded) and then enters reorder mode. Every other change is picked up in onResume through the change count.
-     */
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == LAUNCHER_SETTINGS_REQUEST && resultCode == RESULT_OK
-                && data != null && data.getBooleanExtra(LauncherSettingsActivity.EXTRA_REORDER, false)) {
-            getIntent().putExtra(LauncherSettingsActivity.EXTRA_REORDER, true);
-            // The old activity must not consume the pending action, or rebuild a second time in onResume.
-            settingsRecreationPending = true;
-            settingsRevision = settingsRevision();
-            recreate();
-        }
-    }
-
-    private void startPendingSettingsReorder() {
-        if (settingsRecreationPending || !tilesReady || !hasWindowFocus() || isFinishing()
-                || !getIntent().getBooleanExtra(LauncherSettingsActivity.EXTRA_REORDER, false)) return;
-        getIntent().removeExtra(LauncherSettingsActivity.EXTRA_REORDER);
-        toggleReorder();
+        if (requestCode == LAUNCHER_SETTINGS_REQUEST && resultCode == RESULT_OK) recreate();
     }
 
     /** Rebuilds the tiles (and the module cards), then puts focus back where it was. */
     private void reloadApps(boolean animate) {
-        reloadApps(animate, true);
-    }
-
-    /** @param rebuild false keeps the tiles as they are and only puts focus back (TileRefresh.Action.REFOCUS). */
-    private void reloadApps(boolean animate, boolean rebuild) {
-        reloadApps(animate, rebuild, true);
-    }
-
-    /**
-     * @param entrance false puts focus back as an animated reload would, without replaying the tiles' entrance:
-     *                 on a return to the same tiles it would only mark a change that didn't happen.
-     */
-    private void reloadApps(boolean animate, boolean rebuild, boolean entrance) {
         cancelPendingFocusScroll();
         RecyclerView.ViewHolder footer = grid.findViewHolderForAdapterPosition(adapter.appCount());
         final boolean restoreLibrary = adapter.isLibraryAt(adapter.appCount()) && footer != null
@@ -910,12 +756,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             heroArt.animate().cancel();
             heroArt.setAlpha(0f);
         }
-        if (rebuild) reloadTiles();
-        if (animate && entrance && animations && !reducedMotion) {
-            grid.scheduleLayoutAnimation();
-            // A rebuild redraws the grid anyway; without one the entrance needs a draw to start.
-            if (!rebuild) grid.invalidate();
-        }
+        reloadTiles();
+        if (animate && animations && !reducedMotion) grid.scheduleLayoutAnimation();
 
         if (restoreFocus) {
             // Keep a focused footer at the end even when the app count changes.
@@ -929,20 +771,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (pos < 0) hideHero();
             // A newly installed app may have brought a card with it.
             tilesReady = true;
-            startPendingSettingsReorder();
             showCardPrompt();
         }
-    }
-
-    /** True when PackageManager reports apps changed since the last rebuild (one binder call). */
-    private boolean packagesChangedSinceRebuild() {
-        ChangedPackages changed = getPackageManager().getChangedPackages(packageSequence);
-        return changed != null && !changed.getPackageNames().isEmpty();
-    }
-
-    private int currentPackageSequence(int since) {
-        ChangedPackages changed = getPackageManager().getChangedPackages(since);
-        return changed != null ? changed.getSequenceNumber() : since;
     }
 
     /**
@@ -957,7 +787,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         final int returnSlot = lastFocused;
         final List<Cards.Card> none = Collections.emptyList();
         // An updated app may bring new artwork; the backdrop is cheap to make again.
-        heroArtCache.clear();
+        heroArtCache.evictAll();
         heroArtKey = null;
         // One LEANBACK query for both the tiles and the card checks.
         final List<ResolveInfo> leanback = getPackageManager().queryIntentActivities(
@@ -967,7 +797,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         adapter.reload(cards.isEmpty() ? none : CardFeature.run(() -> Cards.shown(cards), none), leanback);
         lastFocusedKey = returnKey;
         lastFocused = returnSlot;
-        packageSequence = currentPackageSequence(packageSequence);
     }
 
     /**
@@ -983,16 +812,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (returnToLibrary || libraryFocusPending) focusLibrary();
             else focusTile(pos >= 0 ? pos : returnSlot);
             tilesReady = true;
-            startPendingSettingsReorder();
             showCardPrompt();
         });
     }
 
-    /** Any key on Home restarts the countdown to the idle clock. */
+    /** Any key on Home restarts the countdown to the idle clock and screensaver. */
     @Override
     public void onUserInteraction() {
         super.onUserInteraction();
         restartIdleClock();
+        resetScreensaverTimer();
     }
 
     private void restartIdleClock() {
@@ -1011,6 +840,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         ambient.animate().cancel();
         heroArt.animate().cancel();
         handler.removeCallbacks(minuteTick);
+        handler.removeCallbacks(screensaverRunnable);
         stopStats();
         if (diya != null) diya.stop();
         cancelPendingFocusScroll();
@@ -1024,10 +854,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     protected void onStop() {
         super.onStop();
         started = false;
+        unregisterReceiver(packageReceiver);
         unregisterReceiver(timeReceiver);
         handler.removeCallbacks(clockCheck);
         stopped = true;
-        tileRefresh.onStop();
+        rebuildOnResume = true;
     }
 
     /**
@@ -1048,16 +879,17 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // they hold) would stay attached until Home comes back. setAdapter(null) recycles them now.
         grid.setAdapter(null);
         grid.getRecycledViewPool().clear();
-        heroArtCache.clear();
+        heroArtCache.evictAll();
+        WallpaperThumbnailLoader.evictAll();
+        if (wallpaperPlayer != null) wallpaperPlayer.trimMemory(level);
         heroArtKey = null;
-        tileRefresh.invalidate();
+        rebuildOnResume = true;
     }
 
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) {
-            startPendingSettingsReorder();
             if (libraryFocusPending && appLibrary == null) focusLibrary();
             showCardPrompt();
         }
@@ -1066,7 +898,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        unregisterReceiver(packageReceiver);
         wallpaperPlayer.close();
         ConnectivityManager cm = getSystemService(ConnectivityManager.class);
         TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
@@ -1110,17 +941,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (handleSettingsKey(event)) return true;
-        if (tileMenuEnabled && !reordering && openPopup == null && cardPrompt == null
-                && event.getKeyCode() == KeyEvent.KEYCODE_MENU) {
-            int position = focusedTilePosition();
-            if (position >= 0 && position < adapter.appCount()
-                    && !getPackageName().equals(adapter.packageAt(position))) {
-                if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) {
-                    onTileLongPress(position, getCurrentFocus());
-                }
-                return true;
-            }
-        }
         if (!reordering) return super.dispatchKeyEvent(event);
         if (dockEditing) return dispatchDockEdit(event);
         boolean down = event.getAction() == KeyEvent.ACTION_DOWN;
@@ -1138,7 +958,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     return true;
                 default:
                     if (ok || back) {
-                        if (!down) drop();
+                        if (ok && down) okDownSeen = true;
+                        if (!down && (back || okDownSeen)) {
+                            okDownSeen = false;
+                            if (singleTileMove) {
+                                endReorder();
+                            } else {
+                                drop();
+                            }
+                        }
                         return true;
                     }
                     return super.dispatchKeyEvent(event);
@@ -1150,9 +978,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         int pos = focusedTilePosition();
         if (ok && grid.hasFocus()) {
+            if (down) okDownSeen = true;
             // RecyclerView can briefly report NO_POSITION during a move or rebind. Still consume
             // OK on the grid: falling through would let the focused card open its app in reorder mode.
-            if (!down && pos >= 0) pickUp(pos);
+            if (!down && okDownSeen && pos >= 0) {
+                okDownSeen = false;
+                pickUp(pos);
+            }
             return true;
         }
         return super.dispatchKeyEvent(event);   // arrows navigate; OK on a top-bar pill works as usual
@@ -1179,10 +1011,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** The start shared by reorder and edit-dock mode. False when there is nothing to move. */
     private boolean beginReorder() {
         if (adapter.movableCount() < 2) return false;
-        // Before the reload below: once it has dropped the empty slots, the dock row also shows grid apps.
-        dockInSession = new HashSet<>();
-        dockedAtStart = adapter.dockFilled();
-        for (int i = 0; i < Math.min(dockedAtStart, adapter.movableCount()); i++) dockInSession.add(adapter.keyAt(i));
         adapter.setReordering(true);
         if (adapter.hasEmptySlots()) reloadTiles();   // every position must hold a tile that can move
         reordering = true;
@@ -1215,9 +1043,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         boolean back = code == KeyEvent.KEYCODE_BACK || code == KeyEvent.KEYCODE_ESCAPE;
         if (back) {
             if (!down) {
-                if (dockEditAppKey != null) {
-                    endReorder();   // "Add to dock" cancelled before a place was chosen
-                } else if (dockEditSlot >= 0) {
+                if (dockEditSlot >= 0) {
                     int slot = dockEditSlot;
                     dockEditSlot = -1;
                     dimOthers();
@@ -1232,13 +1058,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (ok && pos >= 0) {
             if (!down) {
                 int n = adapter.movableCount();
-                if (dockEditAppKey != null) {
-                    if (pos < Math.min(COLUMNS, n)) {
-                        int from = adapter.positionOf(dockEditAppKey);
-                        if (from >= 0) swapIntoDock(pos, from);
-                        else endReorder();
-                    }
-                } else if (dockEditSlot < 0) {
+                if (dockEditSlot < 0) {
                     if (pos < Math.min(COLUMNS, n)) {
                         dockEditSlot = pos;
                         dimOthers();
@@ -1254,30 +1074,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         return super.dispatchKeyEvent(event);   // arrows navigate as usual
     }
 
-    /**
-     * Edit-dock mode started from the tile menu. A dock app: its place is already chosen, so focus goes to the grid
-     * for the app to put there. A grid app: it is already chosen, so focus goes to the dock for the place.
-     */
-    private void startDockEditFor(String key, boolean inDock) {
-        if (reordering) endReorder();
-        if (!beginReorder()) return;
-        dockEditing = true;
-        int pos = adapter.positionOf(key);   // beginReorder can rebuild the tiles
-        int n = adapter.movableCount();
-        if (pos < 0) {
-            endReorder();
-        } else if (inDock) {
-            dockEditSlot = pos;
-            dimOthers();
-            focusTile(Math.min(COLUMNS, n - 1));
-            Toast.makeText(this, R.string.dock_edit_pick_app, Toast.LENGTH_LONG).show();
-        } else {
-            dockEditAppKey = key;
-            focusTile(0);
-            Toast.makeText(this, R.string.dock_edit_pick_place, Toast.LENGTH_LONG).show();
-        }
-    }
-
     /** Puts the app at pos into dock place slot, and the app that was there where the chosen one was; then saves. */
     private void swapIntoDock(int slot, int pos) {
         String slotKey = adapter.keyAt(slot);
@@ -1286,8 +1082,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 adapter.move(pos, slot);
                 adapter.move(adapter.positionOf(slotKey), pos);
             });
-            dockInSession.add(adapter.keyAt(slot));
-            if (pos >= COLUMNS) dockInSession.remove(slotKey);
         }
         endReorder();
         refocusAfterLayout(slot);
@@ -1327,25 +1121,17 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (!reordering) return;
         dockEditing = false;
         dockEditSlot = -1;
-        dockEditAppKey = null;
         drop();
         reordering = false;
+        singleTileMove = false;
         adapter.setReordering(false);
         glass.setAccent(festive ? festival.accentColor() : 0);
         btnReorder.setActivated(false);
         List<String> keys = adapter.movableKeys();
         List<String> before = orderAtStart;
         orderAtStart = null;
-        // fill_dock false: the dock is what the owner put there, saved with its size, so the empty slots that
-        // come back after the mode go after it (#499). With fill_dock true every dock slot holds an app anyway.
-        int docked = -1;
-        if (fillDockLeavesSlots) {
-            docked = DockSlots.dockCount(keys, COLUMNS, dockInSession);
-            keys = DockSlots.dockFirst(keys, COLUMNS, dockInSession);
-        }
-        dockInSession = null;
-        if (!keys.equals(before) || (fillDockLeavesSlots && docked != dockedAtStart)) {
-            Order order = new Order(Order.dockKey(dockApps), keys, docked);
+        if (!keys.equals(before)) {
+            Order order = new Order(Order.dockKey(dockApps), keys);
             if (Order.save(Order.file(this), order)) {
                 adapter.setSavedOrder(Order.ranks(order, dockApps), Order.docked(order, dockApps));
             } else {
@@ -1375,9 +1161,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         else to = from / COLUMNS < (n - 1) / COLUMNS ? n - 1 : from;
         if (to < 0 || to >= n || to == from) return;
         keepScroll(() -> adapter.move(from, to));
-        // The owner carries this tile: where it lands decides whether it is in the dock, not dock_apps (#499).
-        if (to < COLUMNS) dockInSession.add(movingKey);
-        else dockInSession.remove(movingKey);
         refocusAfterLayout(to);
     }
 
@@ -1419,8 +1202,129 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     }
 
     @Override
+    public void onTileLongPress(int position, View card) {
+        if (reordering || movingKey != null) {
+            endReorder();
+            return;
+        }
+        String pkg = adapter.packageAt(position);
+        if (pkg == null || pkg.equals(getPackageName())) return;
+        if (reordering || movingKey != null) {
+            endReorder();
+            return;
+        }
+        if (openPopup != null) {
+            openPopup.dismiss();
+            openPopup = null;
+        }
+        View panel = getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
+        LinearLayout rows = panel.findViewById(R.id.rows);
+        int width = (int) (180 * density);
+        final PopupWindow popup = glassPopup(panel, width);
+        openPopup = popup;
+
+        addInputRow(rows, popup, R.drawable.ic_move, getString(R.string.move_app), -1, () -> startMoving(position));
+        addSeparator(rows);
+        addInputRow(rows, popup, R.drawable.ic_settings, getString(R.string.app_info), -1, () -> {
+            Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + pkg));
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            try {
+                startActivity(i);
+            } catch (ActivityNotFoundException ignored) {
+            }
+        });
+
+        popup.setOnDismissListener(() -> {
+            if (openPopup == popup) openPopup = null;
+            if (!reordering && movingKey == null) {
+                grid.post(() -> focusTile(lastFocused));
+            }
+        });
+
+        panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+        int pWidth = Math.max(width, panel.getMeasuredWidth());
+        popup.setWidth(pWidth);
+        int pHeight = panel.getMeasuredHeight();
+
+        Rect r = new Rect(0, 0, card.getWidth(), card.getHeight());
+        root.offsetDescendantRectToMyCoords(card, r);
+        int gap = (int) (10 * density);
+        boolean openAbove = (r.bottom + gap + pHeight) > (root.getHeight() - (int) (16 * density));
+        int yOff = openAbove ? -(card.getHeight() + pHeight + gap) : gap;
+
+        panel.setAlpha(0f);
+        panel.setPivotY(openAbove ? pHeight : 0f);
+        panel.setScaleY(0.92f);
+        panel.setTranslationY(openAbove ? 8 * density : -8 * density);
+        popup.showAsDropDown(card, 0, yOff, Gravity.START);
+        panel.animate().alpha(1f).scaleY(1f).translationY(0f).setDuration(220)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f)).start();
+        rows.getChildAt(0).requestFocus();
+    }
+
+    private void startMoving(int position) {
+        if (!beginReorder()) return;
+        singleTileMove = true;
+        okDownSeen = false;
+        pickUp(position);
+        Toast.makeText(this, getString(R.string.moving_hint, adapter.labelAt(position)), Toast.LENGTH_SHORT).show();
+        grid.post(() -> focusTile(position));
+    }
+
+    private final Runnable screensaverRunnable = this::launchScreensaver;
+
+    private long getScreensaverTimeoutMs() {
+        try {
+            int timeout = Settings.System.getInt(getContentResolver(), Settings.System.SCREEN_OFF_TIMEOUT, 0);
+            if (timeout > 0) return timeout;
+            timeout = Settings.Secure.getInt(getContentResolver(), "screensaver_timeout", 0);
+            if (timeout > 0) return timeout;
+        } catch (Exception ignored) {
+        }
+        return 600_000L; // default 10 minutes
+    }
+
+    private void resetScreensaverTimer() {
+        handler.removeCallbacks(screensaverRunnable);
+        long timeoutMs = getScreensaverTimeoutMs();
+        if (timeoutMs > 0) {
+            handler.postDelayed(screensaverRunnable, timeoutMs);
+        }
+    }
+
+    private void launchScreensaver() {
+        if (!hasWindowFocus() || isFinishing()) return;
+        if (reordering || dockEditing) return;
+        Intent dream = new Intent(Intent.ACTION_MAIN)
+                .setClassName("com.android.systemui", "com.android.systemui.Somnambulator")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            startActivity(dream);
+        } catch (Exception e) {
+            try {
+                startActivity(new Intent(Intent.ACTION_DREAMING_STARTED).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+
+    @Override
     public void onBackPressed() {
-        // Home screen: Back goes nowhere.
+        if (reordering) {
+            endReorder();
+            return;
+        }
+        View current = getCurrentFocus();
+        if (current != null && (current == btnInputs || current == btnWifi || current == findViewById(R.id.btnSettings) || current == btnReorder)) {
+            focusTile(0);
+            return;
+        }
+        if (lastFocused >= COLUMNS) {
+            focusTile(0);
+            return;
+        }
+        launchScreensaver();
     }
 
     // ---- glass highlight -------------------------------------------------------------------------
@@ -1464,7 +1368,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         Rect r = tileRect;
         r.set(0, 0, card.getWidth(), card.getHeight());
         root.offsetDescendantRectToMyCoords(card, r);
-        float pad = 6f * density;        // matches GlassView's glow inset
+        float pad = GlassView.INSET_DP * density;        // matches GlassView's glow/shadow inset
         float scale = adapter.focusScale();
         float w = card.getWidth() * scale + 2 * pad;
         float h = card.getHeight() * scale + 2 * pad;
@@ -1482,10 +1386,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         glassCardW = card.getWidth();
         glassTargetX = x;
         glassTargetY = y;
-        // Cinematic shelf: the highlight glows in the dock app's colour, plain white in the grid. app_glow: every tile.
-        boolean coloured = (appGlow || cinematic && position < COLUMNS) && !festive;
-        int accent = coloured ? adapter.ambientColorAt(position) : 0;
-        if ((cinematic || appGlow) && !festive && accent != glassAccent) {
+        // Cinematic shelf: the highlight glows in the dock app's colour, plain white in the grid.
+        int accent = cinematic && ambientGlow && !festive && position < COLUMNS ? adapter.ambientColorAt(position) : (festive ? festival.accentColor() : 0);
+        if (accent != glassAccent) {
             glassAccent = accent;
             glass.setAccent(accent);
         }
@@ -1494,7 +1397,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             springY.cancel();
             glass.setTranslationX(x);
             glass.setTranslationY(y);
-            if (animations && !reducedMotion) glass.animate().alpha(1f).setDuration(180).start();
+            if (animations) glass.animate().alpha(1f).setDuration(reducedMotion ? 100 : 180).start();
             else glass.setAlpha(1f);
             glassShown = true;
         } else if (!animations) {
@@ -1536,7 +1439,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         RecyclerView.ViewHolder vh = grid.findViewHolderForAdapterPosition(pos);
         View card = vh == null ? null : vh.itemView.findViewById(R.id.card);
         if (card == null || card.getWidth() <= 0 || !card.isFocused()) return;
-        float pad = 6f * density;
+        float pad = GlassView.INSET_DP * density;
         float scale = adapter.focusScale();
         int w = (int) (card.getWidth() * scale + 2 * pad);
         int h = (int) (card.getHeight() * scale + 2 * pad);
@@ -1552,7 +1455,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         int color = adapter.ambientColorAt(position);
         float y = dockTopInRoot - 14 * density - 26 * density - hero.getHeight();
         boolean changed = !label.contentEquals(heroName.getText());
-        if (cinematic) showHeroArt(position);
+        if (cinematic && ambientGlow) showHeroArt(position);
 
         if (!animations || reducedMotion) {
             // Snap the shelf instead of sliding and fading it: each of those frames repaints the
@@ -1565,7 +1468,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             hero.setAlpha(1f);
             if (ambientGlow) {
                 setAmbient(color);
-                ambient.setAlpha(1f);
+                if (!animations) {
+                    ambient.setAlpha(1f);
+                } else if (!heroShown) {
+                    ambient.setAlpha(0f);
+                    ambient.animate().alpha(1f).setDuration(160).start();
+                }
             }
             heroShown = true;
             return;
@@ -1605,28 +1513,34 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
     }
 
-    /** The shelf's text for this dock app: its name and, on the cinematic shelf, "Last opened" and the dots. */
+    /** The shelf's text for this dock app: its name, "Last opened" line, and dock position dots. */
     private void fillHero(int position, String label) {
         heroName.setText(label);
-        if (!cinematic) return;
         updateHeroMeta(position);
         updateHeroDots(position);
     }
 
-    // ---- cinematic shelf -------------------------------------------------------------------------
+    // ---- hero shelf (typography & metadata) --------------------------------------------------------
 
-    /** The parts that never change: a larger name, the meta line and the dots, the artwork and the scrim. */
-    private void setUpCinematicShelf() {
+    /** The parts that never change: large typography, the meta line and the dots. */
+    private void setUpHeroShelf() {
         heroName.setTextSize(TypedValue.COMPLEX_UNIT_SP, 68f);
         heroName.setLetterSpacing(-0.025f);
         heroMeta.setVisibility(View.INVISIBLE);   // keeps its height, so the name does not jump when it fills in
         heroDots.setVisibility(View.VISIBLE);
-        heroArt.setVisibility(View.VISIBLE);
-        // One stretched bitmap: apply its alpha while drawing instead of through an offscreen buffer.
-        heroArt.forceHasOverlappingRendering(false);
-        View scrim = findViewById(R.id.heroScrim);
-        scrim.setBackground(scrimDrawable());
-        scrim.setVisibility(View.VISIBLE);
+        if (cinematic && ambientGlow) {
+            heroArt.setVisibility(View.VISIBLE);
+            heroArt.forceHasOverlappingRendering(false);
+            View scrim = findViewById(R.id.heroScrim);
+            if (scrim != null) {
+                scrim.setBackground(scrimDrawable());
+                scrim.setVisibility(View.VISIBLE);
+            }
+        } else {
+            heroArt.setVisibility(View.GONE);
+            View scrim = findViewById(R.id.heroScrim);
+            if (scrim != null) scrim.setVisibility(View.GONE);
+        }
     }
 
     /**
@@ -1653,6 +1567,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     /** Swaps the backdrop to this app's artwork: fade out, swap, fade in, the way the shelf's name changes. */
     private void showHeroArt(int position) {
+        if (!ambientGlow) return;
         String key = adapter.keyAt(position);
         if (key == null) return;
         heroArt.animate().cancel();
@@ -1680,7 +1595,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     private void fadeHeroArt(int ms) {
         if (!animations) heroArt.setAlpha(HERO_ART_ALPHA);
-        else heroArt.animate().alpha(HERO_ART_ALPHA).setDuration(reducedMotion ? Math.min(ms, Motion.REDUCED_MS) : ms).start();
+        else heroArt.animate().alpha(HERO_ART_ALPHA).setDuration(reducedMotion ? Math.min(ms, 160) : ms).start();
     }
 
     /** "Last opened yesterday, 9:40 PM", the time in white; nothing (but the same height) when it was never seen. */
@@ -1753,19 +1668,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                         w * (rtl ? 0.20f : 0.80f), h * 0.06f, w * 0.78f,
                         new int[]{0xA6FFFFFF, 0x47FFFFFF, 0x00FFFFFF},
                         new float[]{0f, 0.5f, 1f},
-                        Shader.TileMode.CLAMP));
-            } else if (Config.GLOW_HORIZON.equals(glowStyle)) {
-                // The colour washes down from the top edge and fades out three quarters of the way down,
-                // with a brighter band along the top like light over a horizon.
-                paint.setShader(new LinearGradient(0, 0, 0, h * 0.75f,
-                        new int[]{0x66FFFFFF, 0x24FFFFFF, 0x00FFFFFF},
-                        new float[]{0f, 0.4f, 1f},
-                        Shader.TileMode.CLAMP));
-                canvas.drawRect(0, 0, w, h, paint);
-                paint.setShader(new RadialGradient(
-                        w * 0.5f, -h * 0.25f, w * 0.55f,
-                        new int[]{0x40FFFFFF, 0x00FFFFFF},
-                        null,
                         Shader.TileMode.CLAMP));
             } else {
                 paint.setShader(new RadialGradient(
@@ -1842,10 +1744,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         ambient.animate().cancel();
         heroArt.animate().cancel();
         heroShown = false;
-        if (animations && !reducedMotion) {
-            hero.animate().alpha(0f).setDuration(160).start();
-            if (ambientGlow) ambient.animate().alpha(0f).setDuration(300).start();
-            heroArt.animate().alpha(0f).setDuration(300).start();
+        if (animations) {
+            hero.animate().alpha(0f).setDuration(reducedMotion ? 100 : 160).start();
+            if (ambientGlow) ambient.animate().alpha(0f).setDuration(reducedMotion ? 140 : 300).start();
+            heroArt.animate().alpha(0f).setDuration(reducedMotion ? 140 : 300).start();
         } else {
             hero.setAlpha(0f);
             ambient.setAlpha(0f);
@@ -1857,7 +1759,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (!glassShown) return;
         glassShown = false;
         glass.animate().cancel();
-        if (animations && !reducedMotion) glass.animate().alpha(0f).setDuration(160).start();
+        if (animations) glass.animate().alpha(0f).setDuration(160).start();
         else glass.setAlpha(0f);
     }
 
@@ -1925,11 +1827,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // showing a dash that never fills in.
         StringBuilder line = new StringBuilder();
         if (cpu >= 0) line.append(getString(R.string.stats_cpu, cpu));
-        long[] mem = memUsedOfTotalMb();
-        if (mem != null) appendStat(line, getString(R.string.stats_memory, mem[0], mem[1]));
-        String free = formatGb(getResources(), Environment.getDataDirectory().getFreeSpace());
+        long mem = memAvailableMb();
+        long total = memTotalMb();
+        if (mem >= 0) appendStat(line, getString(R.string.stats_memory, mem, total >= 0 ? total : mem));
+        String free = formatGb(Environment.getDataDirectory().getFreeSpace());
         if (!free.isEmpty()) appendStat(line, getString(R.string.stats_storage, free));
-        return StatsText.forLocale(line.toString(), getResources().getConfiguration().getLocales().get(0));
+        return line.toString();
     }
 
     // -1: need another sample. -2: this source cannot be read (Android 9 hides /proc/stat from apps).
@@ -2013,26 +1916,32 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         return Math.max(0, Math.min(100, busy));
     }
 
-    /** RAM usage as {used, total} in MB, used = MemTotal - MemAvailable, e.g. "945 / 1536 MB". Used over
-     *  free so the line reads as a load against a known whole; null when /proc/meminfo cannot be read. */
-    private long[] memUsedOfTotalMb() {
-        long available = -1, total = -1;
+    private long memAvailableMb() {
         try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.FileReader("/proc/meminfo"))) {
             String line;
-            String[] t;
             while ((line = r.readLine()) != null) {
                 if (line.startsWith("MemAvailable:")) {
-                    t = line.split("\\s+");
-                    if (t.length >= 2) available = Long.parseLong(t[1]) / 1024;
-                } else if (line.startsWith("MemTotal:")) {
-                    t = line.split("\\s+");
-                    if (t.length >= 2) total = Long.parseLong(t[1]) / 1024;
+                    String[] t = line.split("\\s+");
+                    return t.length >= 2 ? Long.parseLong(t[1]) / 1024 : -1;
                 }
             }
         } catch (IOException | NumberFormatException ignored) {
         }
-        if (available < 0 || total <= 0) return null;
-        return new long[]{Math.max(0, total - available), total};
+        return -1;
+    }
+
+    private long memTotalMb() {
+        try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.FileReader("/proc/meminfo"))) {
+            String line;
+            while ((line = r.readLine()) != null) {
+                if (line.startsWith("MemTotal:")) {
+                    String[] t = line.split("\\s+");
+                    return t.length >= 2 ? Long.parseLong(t[1]) / 1024 : -1;
+                }
+            }
+        } catch (IOException | NumberFormatException ignored) {
+        }
+        return -1;
     }
 
     private static String readFirstLine(String path) {
@@ -2043,11 +1952,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
     }
 
-    private static String formatGb(Resources res, long bytes) {
+    private static String formatGb(long bytes) {
         if (bytes <= 0) return "";
         double gb = bytes / (1024.0 * 1024 * 1024);
-        return gb >= 10 ? res.getString(R.string.storage_gb_whole, gb)
-                : res.getString(R.string.storage_gb_decimal, gb);
+        return gb >= 10 ? String.format(Locale.US, "%.0f GB", gb)
+                : String.format(Locale.US, "%.1f GB", gb);
     }
 
     // ---- navigation ------------------------------------------------------------------------------
@@ -2213,32 +2122,56 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private void updateGreeting() {
         int hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
         int res;
-        // Indonesian day parts run on different hours than English:
-        // Pagi 00-10, Siang 10-15, Sore 15-18, Malam 18-24.
-        // The app's own locale (per-app language on Android 13+), under either code Android uses for Indonesian.
-        String lang = getResources().getConfiguration().getLocales().get(0).getLanguage();
-        if ("in".equals(lang) || "id".equals(lang)) {
-            if (hour < 10) res = R.string.good_morning;
-            else if (hour < 15) res = R.string.good_afternoon;
-            else if (hour < 18) res = R.string.good_evening;
-            else res = R.string.good_night;
-        } else {
-            if (hour < 5) res = R.string.good_night;
-            else if (hour < 12) res = R.string.good_morning;
-            else if (hour < 17) res = R.string.good_afternoon;
-            else if (hour < 22) res = R.string.good_evening;
-            else res = R.string.good_night;
-        }
+        if (hour < 5) res = R.string.good_night;
+        else if (hour < 12) res = R.string.good_morning;
+        else if (hour < 17) res = R.string.good_afternoon;
+        else if (hour < 22) res = R.string.good_evening;
+        else res = R.string.good_night;
         String festiveGreeting = festive ? festival.greetingText(getResources()) : "";
+        String targetText;
+        int targetColor;
         if (!festiveGreeting.isEmpty()) {
-            greeting.setText(festiveGreeting);
-            greeting.setTextColor(liftTowardsWhite(festival.accentColor(), 0.25f));
+            targetText = festiveGreeting;
+            targetColor = liftTowardsWhite(festival.accentColor(), 0.25f);
         } else {
-            greeting.setText(greetingName.isEmpty() ? getString(res)
-                    : getString(R.string.greeting_with_name, getString(res), greetingName));
-            greeting.setTextColor(greetingColor);
+            targetText = greetingName.isEmpty() ? getString(res)
+                    : getString(R.string.greeting_with_name, getString(res), greetingName);
+            targetColor = greetingColor;
         }
-        if (shamsi) shamsiDate.setText(Shamsi.today(getResources()));
+        if (!TextUtils.equals(greeting.getText(), targetText)) {
+            greeting.setText(targetText);
+        }
+        if (greeting.getCurrentTextColor() != targetColor) {
+            greeting.setTextColor(targetColor);
+        }
+        if (shamsi) {
+            String today = Shamsi.today(getResources());
+            if (!TextUtils.equals(shamsiDate.getText(), today)) {
+                shamsiDate.setText(today);
+            }
+        }
+    }
+
+    /** Weather line above the date; the cached reading shows at once, a fresh one every 30 minutes. */
+    private void updateWeather() {
+        if (weather == null || config == null || !config.showWeather) return;
+        Weather.refresh(this, config, handler, text -> {
+            if (isDestroyed()) return;
+            if (TextUtils.equals(weather.getText(), text) && weather.getVisibility() == View.VISIBLE) {
+                return;
+            }
+            weather.setText(text);
+            weather.setVisibility(View.VISIBLE);
+            View divider = findViewById(R.id.clockDivider);
+            if (divider != null) {
+                ViewGroup.LayoutParams lp = divider.getLayoutParams();
+                int targetHeight = (int) (38 * density);
+                if (lp.height != targetHeight) {
+                    lp.height = targetHeight;
+                    divider.setLayoutParams(lp);
+                }
+            }
+        });
     }
 
     // ---- race-weekend panel (a theme's race_calendar) -----------------------------------------------
@@ -2399,9 +2332,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     /** config.xml icon_only_buttons. */
     private boolean iconOnlyButtons;
-    /** config.xml top_menu: Inputs, Wi-Fi and Settings folded into one gear. */
-    private boolean topMenu;
-    private boolean launcherSettingsButton;
     /** icon_only_buttons without wifi_label_width: the Wi-Fi pill shows no network name. */
     private boolean wifiIconOnly;
     /** The app library button in the top bar (library_button). */
@@ -2479,19 +2409,36 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     }
 
 
-    /** Every settings entry shares the standard intent and the vendor fallback (SystemSettings). */
+    /**
+     * China-market MIUI TV firmware answers no standard Settings intents at all; open Xiaomi's own
+     * settings app (com.xiaomi.mitv.settings) there, so the Settings and Wi-Fi pills keep working.
+     * On firmware with a standard settings handler the behaviour is unchanged.
+     */
     private Intent systemIntent(String standardAction) {
-        return SystemSettings.intent(this, standardAction);
+        Intent i = new Intent(standardAction);
+        if (i.resolveActivity(getPackageManager()) != null) return i;
+        i = new Intent().setComponent(new ComponentName(
+                "com.xiaomi.mitv.settings", "com.xiaomi.mitv.settings.entry.MainActivity"));
+        if (i.resolveActivity(getPackageManager()) != null) return i;
+        return new Intent(standardAction);   // nothing found: let open() show the can't-open toast
+    }
+
+    private boolean isTvAppAvailable(String pkg) {
+        if (pkg == null) return false;
+        try {
+            return getPackageManager().getLeanbackLaunchIntentForPackage(pkg) != null
+                    || getPackageManager().getLaunchIntentForPackage(pkg) != null;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /** Hides the Inputs pill when it would have nothing to list: streaming boxes have no HDMI-in, AV or tuner. */
     private void updateInputsButton() {
-        if (!showInputsPill) {
-            btnInputs.setVisibility(View.GONE);
-            return;
-        }
         boolean any = liveTvIntent() != null || !sourcePanelService.isEmpty()
-                || (coocaaSources && !CoocaaSources.list(this).isEmpty());
+                || isTvAppAvailable("com.mitv.tvhome.mitvplus")
+                || isTvAppAvailable("com.nst.iptvsmarterstvbox")
+                || isTvAppAvailable("com.nostalgiatv.nostalgia_tv");
         TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
         if (!any && tim != null) {
             for (TvInputInfo info : tim.getTvInputList()) {
@@ -2503,20 +2450,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }
         }
         btnInputs.setVisibility(any ? View.VISIBLE : View.GONE);
-    }
-
-    /** boot_to_live_tv: the first time Home comes up after the TV starts, open the Live TV app instead. Once per
-     *  boot, keyed on Settings.Global.BOOT_COUNT, so a later Home press stays on Home. */
-    private boolean openLiveTvAfterBoot() {
-        if (!bootToLiveTv) return false;
-        int boot = Settings.Global.getInt(getContentResolver(), Settings.Global.BOOT_COUNT, -1);
-        SharedPreferences prefs = getSharedPreferences("boot", MODE_PRIVATE);
-        if (boot < 0 || prefs.getInt("live_tv_boot", -1) == boot) return false;
-        prefs.edit().putInt("live_tv_boot", boot).apply();
-        Intent i = liveTvIntent();
-        if (i == null) return false;
-        open(i);
-        return true;
     }
 
     /** The Live TV app's launch intent: its leanback entry point, or the configured action if it has none. */
@@ -2534,14 +2467,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         Intent i = new Intent(sourcePanelAction);
         ComponentName c = ComponentName.unflattenFromString(sourcePanelService);
         if (c != null) i.setComponent(c);
-        int eq = sourcePanelExtra.indexOf('=');
-        if (eq > 0) {
-            try {
-                i.putExtra(sourcePanelExtra.substring(0, eq).trim(),
-                        Integer.parseInt(sourcePanelExtra.substring(eq + 1).trim()));
-            } catch (NumberFormatException ignored) {
-            }
-        }
         try {
             if (getPackageManager().resolveActivity(i, 0) != null) {
                 startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
@@ -2557,56 +2482,22 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         try {
             startActivity(i);
-        } catch (ActivityNotFoundException | SecurityException e) {
+        } catch (ActivityNotFoundException e) {
             Toast.makeText(this, R.string.not_available, Toast.LENGTH_SHORT).show();
         }
     }
 
-    /** `input_sources` in config.xml: "HW5=23" maps the framework input whose id ends in /HW5 to a vendor
-     *  source number; "HW8=-" leaves that input out of the Inputs menu (a port the board reports but the set
-     *  does not have). Returns the number, -1 for a left-out input, or null when the input is not listed. */
-    private Integer mappedSource(String inputId) {
-        if (inputId == null) return null;
-        String hw = inputId.substring(inputId.lastIndexOf('/') + 1);
-        for (String m : getResources().getStringArray(R.array.input_sources)) {
-            int eq = m.indexOf('=');
-            if (eq <= 0 || !m.substring(0, eq).trim().equals(hw)) continue;
-            String v = m.substring(eq + 1).trim();
-            if (v.equals("-")) return -1;
-            try { return Integer.parseInt(v); } catch (NumberFormatException e) { return null; }
-        }
-        return null;
-    }
-
-    /** Switches to a passthrough input (HDMI, AV). An input mapped in `input_sources` is opened by sending
-     *  `input_action` with its source number as the int extra "input" (Xiaomi China firmware, whose tvplayer
-     *  answers com.xiaomi.mitv.tvplayer.EXTSRC_PLAY and nothing else). Otherwise the standard way is
-     *  ACTION_VIEW on its channel URI, which the Live TV app handles; where nothing takes that, the
-     *  configured `input_action` is sent with the same URI instead (XGIMI's HDMI player only answers
-     *  com.xgimi.action.hdmiPlayer). With `input_uri_scheme` set (YaOS: live-tv) the same URI goes out
-     *  with that scheme and no MIME type. A player guarded by a permission this build does not declare
-     *  throws SecurityException, which used to take Home down with it (YaOS before the manifest asked
-     *  for ACCESS_TV_SOURCE). */
+    /** Switches to a passthrough input (HDMI, AV). The standard way is ACTION_VIEW on its channel URI,
+     *  which the Live TV app handles; where nothing takes that, the configured `input_action` is sent
+     *  with the same URI instead (XGIMI's HDMI player only answers com.xgimi.action.hdmiPlayer). */
     private void openInput(String inputId) {
-        Integer source = mappedSource(inputId);
-        if (source != null && source >= 0 && !inputAction.isEmpty()) {
-            try {
-                startActivity(new Intent(inputAction).putExtra("input", source.intValue())
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-                return;
-            } catch (ActivityNotFoundException | SecurityException e) {
-                // fall through to the standard way
-            }
-        }
         Uri uri = TvContract.buildChannelUriForPassthroughInput(inputId);
-        Intent view = (inputUriScheme.isEmpty()
-                ? new Intent(Intent.ACTION_VIEW).setDataAndType(uri, "vnd.android.cursor.item/channel")
-                : new Intent(Intent.ACTION_VIEW, uri.buildUpon().scheme(inputUriScheme).build()))
+        Intent view = new Intent(Intent.ACTION_VIEW).setDataAndType(uri, "vnd.android.cursor.item/channel")
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         try {
             startActivity(view);
             return;
-        } catch (ActivityNotFoundException | SecurityException e) {
+        } catch (ActivityNotFoundException e) {
             if (inputAction.isEmpty()) {
                 Toast.makeText(this, R.string.not_available, Toast.LENGTH_SHORT).show();
                 return;
@@ -2619,16 +2510,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private void showInputs() {
         // A configured source panel and no Live TV row to offer next to it: the panel is the whole menu.
         // The BYINTEK U4 needs this, as its TvInputManager lists three HDMI ports and an AV input it doesn't have.
-        List<CoocaaSources.Source> coocaa = coocaaSources ? CoocaaSources.list(this) : Collections.emptyList();
-        if (coocaa.isEmpty() && !sourcePanelService.isEmpty() && liveTvIntent() == null) {
+        if (!sourcePanelService.isEmpty() && liveTvIntent() == null) {
             openSourcePanel();
             return;
         }
-        // top_menu: the pill is gone, so the list hangs under the gear, growing inward from the right.
-        // Read the switch, not the pill: show_inputs_pill=false hides the pill too, and there the list
-        // keeps its usual place.
-        boolean underGear = topMenu;
-        View anchor = findViewById(underGear ? R.id.btnSettings : R.id.btnInputs);
+        View anchor = findViewById(R.id.btnInputs);
         View panel = getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
         LinearLayout rows = panel.findViewById(R.id.rows);
 
@@ -2676,8 +2562,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             boolean hdmiStateBogus = hdmiPorts > 1 && hdmiConnected == hdmiPorts;
             for (TvInputInfo info : inputs) {
                 if (info.getType() == TvInputInfo.TYPE_TUNER
-                        && (info.getServiceInfo().applicationInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0
-                        && (liveTvInputId.isEmpty() || liveTvInputId.equals(info.getId()))) {
+                        && (info.getServiceInfo().applicationInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0) {
                     // Prefer a hardware tuner: the framework names those ".../HW<n>". System apps such as
                     // AirPlay also register software inputs of type TUNER and may sort first (seen on TCL G05).
                     // Among tuners of the same kind, skip an analog input when another is present.
@@ -2698,8 +2583,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 }
                 // Inputs hidden in the TV's Settings > Inputs stay out of the menu too.
                 if (!info.isPassthroughInput() || info.isHidden(this)) continue;
-                // input_sources can leave out ports the board reports but the set does not have ("HW8=-").
-                if (Integer.valueOf(-1).equals(mappedSource(info.getId()))) continue;
                 // A CEC device's row is added with its port, below.
                 if (info.getParentId() != null && inputIds.contains(info.getParentId())) continue;
                 CharSequence l = info.loadLabel(this);
@@ -2735,18 +2618,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                         () -> openInput(id));
             }
         }
-        // Coocaa OS registers nothing with TvInputManager; com.skyworth.tv lists its sources instead.
-        if (rows.getChildCount() == 0) {
-            for (CoocaaSources.Source s : coocaa) {
-                int icon = "HDMI".equals(s.name) ? R.drawable.ic_input
-                        : "VOD".equals(s.name) ? R.drawable.ic_livetv : R.drawable.ic_av;
-                addInputRow(rows, popup, icon, s.label, -1, () -> {
-                    if (!CoocaaSources.open(this, s)) {
-                        Toast.makeText(this, R.string.not_available, Toast.LENGTH_SHORT).show();
-                    }
-                });
-            }
-        }
         // Nothing to list where there is no TvInputManager: the TV's own source panel switches inputs.
         if (rows.getChildCount() == 0 && !sourcePanelService.isEmpty()) {
             addInputRow(rows, popup, R.drawable.ic_input, getString(R.string.inputs), -1, this::openSourcePanel);
@@ -2758,22 +2629,27 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             // AIWA AI PONT SA that player stays black, and the Live TV package does not handle the
             // URI at all, which used to toast "Not available on this TV". Keep the leanback activity
             // then: it is the same path as the Live TV tile. Do not drop the package restriction.
-            // An explicit tuner uses its channel collection (e.g. DVB-S rather than DVB-T/C).
-            // Keep the legacy passthrough route for automatic selection: some OEM players need it.
-            // If the configured input is absent, tunerId stays null and the app opens normally.
-            boolean configured = !liveTvInputId.isEmpty();
             Intent tuned = new Intent(Intent.ACTION_VIEW)
-                    .setDataAndType(configured ? TvContract.buildChannelsUriForInput(tunerId)
-                                    : TvContract.buildChannelUriForPassthroughInput(tunerId),
-                            configured ? TvContract.Channels.CONTENT_TYPE : TvContract.Channels.CONTENT_ITEM_TYPE)
+                    .setDataAndType(TvContract.buildChannelUriForPassthroughInput(tunerId),
+                            "vnd.android.cursor.item/channel")
                     .setPackage(liveTvPkg);
             if (tuned.resolveActivity(getPackageManager()) != null) liveTv = tuned;
         }
         if (liveTv != null) {
             if (rows.getChildCount() > 0) addSeparator(rows);
             final Intent liveTvIntent = liveTv;
-            addInputRow(rows, popup, R.drawable.ic_livetv, getString(R.string.live_tv), -1, () -> open(liveTvIntent));
+            CharSequence appLabel = null;
+            try {
+                appLabel = getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(liveTvPkg, 0));
+            } catch (Exception ignored) {
+            }
+            String title = (appLabel != null && appLabel.length() > 0) ? appLabel.toString() : getString(R.string.live_tv);
+            addInputRow(rows, popup, R.drawable.ic_livetv, title, -1, () -> open(liveTvIntent));
         }
+
+        addTvAppRow(rows, popup, "com.mitv.tvhome.mitvplus", "Xiaomi TV+");
+        addTvAppRow(rows, popup, "com.nst.iptvsmarterstvbox", "IPTV Smarters Pro");
+        addTvAppRow(rows, popup, "com.nostalgiatv.nostalgia_tv", "NostalgiaTV");
         if (rows.getChildCount() == 0) {
             Toast.makeText(this, R.string.no_inputs, Toast.LENGTH_SHORT).show();
             return;
@@ -2783,7 +2659,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
         popup.setWidth(Math.max(width, Math.min(panel.getMeasuredWidth(), (int) (360 * density))));
 
-        int alignment = getResources().getBoolean(R.bool.rtl_menu_bar) != underGear ? Gravity.END : Gravity.START;
+        int alignment = getResources().getBoolean(R.bool.rtl_menu_bar) ? Gravity.END : Gravity.START;
         dropIn(popup, panel, anchor, alignment);
         rows.getChildAt(0).requestFocus();
     }
@@ -2808,7 +2684,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         panel.setScaleY(0.92f);
         panel.setTranslationY(-8 * density);
         popup.showAsDropDown(anchor, 0, (int) (10 * density), gravity);
-        panel.animate().alpha(1f).scaleY(1f).translationY(0f).setDuration(reducedMotion ? Motion.REDUCED_MS : 220)
+        panel.animate().alpha(1f).scaleY(1f).translationY(0f).setDuration(220)
                 .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f)).start();
     }
 
@@ -2846,43 +2722,191 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         rows.addView(row);
     }
 
-    // ---- launcher settings and module cards -------------------------------------------------------
+    private void addTvAppRow(LinearLayout rows, PopupWindow popup, String pkg, String fallbackTitle) {
+        if (pkg == null || pkg.equals(liveTvPkg)) return;
+        Intent intent = getPackageManager().getLeanbackLaunchIntentForPackage(pkg);
+        if (intent == null) {
+            intent = getPackageManager().getLaunchIntentForPackage(pkg);
+        }
+        if (intent == null) return;
+        String title = fallbackTitle;
+        try {
+            CharSequence label = getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(pkg, 0));
+            if (label != null && label.length() > 0) {
+                title = label.toString();
+            }
+        } catch (Exception ignored) {
+        }
+        final Intent launchIntent = intent;
+        addInputRow(rows, popup, R.drawable.ic_livetv, title, -1, () -> open(launchIntent));
+    }
 
-    /** top_menu: the gear's dropdown, standing in for the Inputs, Wi-Fi and Settings pills. */
-    private void showTopMenu() {
-        View anchor = findViewById(R.id.btnSettings);
+    // ---- Control Center --------------------------------------------------------------------------
+
+    private void showControlCenter() {
+        View anchor = findViewById(R.id.btnControlCenter);
+        if (anchor == null || anchor.getVisibility() != View.VISIBLE) anchor = findViewById(R.id.btnSettings);
         View panel = getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
         LinearLayout rows = panel.findViewById(R.id.rows);
-        PopupWindow popup = glassPopup(panel, (int) (220 * density));
-        // Inputs opens its own list once this one has closed.
-        addInputRow(rows, popup, R.drawable.ic_input, getString(R.string.inputs), -1, () -> root.post(this::showInputs));
-        addInputRow(rows, popup, R.drawable.ic_wifi, getString(R.string.quick_network), -1, this::openNetworkPill);
-        CharSequence network = wifiIconOnly ? btnWifi.getContentDescription() : btnWifi.getText();
-        if (!TextUtils.isEmpty(network)) {
-            TextView status = rows.getChildAt(rows.getChildCount() - 1).findViewById(R.id.status);
-            status.setText(network);
-            status.setVisibility(View.VISIBLE);
-        }
-        if (launcherSettingsButton) {
-            addInputRow(rows, popup, R.drawable.ic_home_settings_pill, getString(R.string.launcher_settings), -1,
-                    () -> startActivityForResult(new Intent(this, LauncherSettingsActivity.class), LAUNCHER_SETTINGS_REQUEST));
-        } else {
-            addInputRow(rows, popup, R.drawable.ic_settings, getString(R.string.settings), -1,
-                    () -> open(systemIntent(Settings.ACTION_SETTINGS)));
-        }
+        int initialWidth = (int) (260 * density);
+        PopupWindow popup = glassPopup(panel, initialWidth);
+
+        // 1. Turn Off Now (Standby)
+        addControlCenterRow(rows, popup, R.drawable.ic_lock, "Turn Off Now", "Standby", () -> {
+            HomeKeyService.standby();
+        });
+
+        // 2. Free Up Memory (RAM)
+        addControlCenterRow(rows, popup, R.drawable.ic_apps, "Free Up Memory", getFreeMemorySubtitle(), () -> {
+            trimMemoryNow();
+        });
+
+        // 3. Storage Cleaner
+        addControlCenterRow(rows, popup, R.drawable.ic_home_settings, "Storage Cleaner", getStorageSubtitle(), () -> {
+            OnlineWallpaper.clearCache(this);
+            try {
+                startActivity(new Intent(Settings.ACTION_INTERNAL_STORAGE_SETTINGS));
+            } catch (Exception e) {
+                open(systemIntent(Settings.ACTION_SETTINGS));
+            }
+        });
+
+        // 4. Sound Output
+        addControlCenterRow(rows, popup, R.drawable.ic_av, "Sound Output", "Audio & Bluetooth", () -> {
+            try {
+                Intent soundIntent = new Intent();
+                soundIntent.setComponent(new ComponentName("com.android.tv.settings", "com.android.tv.settings.device.displaysound.DisplaySoundActivity"));
+                startActivity(soundIntent);
+            } catch (Exception e) {
+                open(systemIntent(Settings.ACTION_SETTINGS));
+            }
+        });
+
+        // 5. Shuffle Wallpaper
+        addControlCenterRow(rows, popup, R.drawable.ic_swap_vert, "Shuffle Wallpaper", "Next photo", () -> {
+            Toast.makeText(this, "Shuffling wallpaper...", Toast.LENGTH_SHORT).show();
+            if (wallpaperPlayer != null) wallpaperPlayer.shuffle();
+        });
+
         panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
-        popup.setWidth(Math.max((int) (220 * density), Math.min(panel.getMeasuredWidth(), (int) (360 * density))));
-        dropIn(popup, panel, anchor, getResources().getBoolean(R.bool.rtl_menu_bar) ? Gravity.START : Gravity.END);
+        popup.setWidth(Math.max(initialWidth, panel.getMeasuredWidth()));
+        dropIn(popup, panel, anchor, getResources().getBoolean(R.bool.rtl_menu_bar)
+                ? Gravity.START : Gravity.END);
         rows.getChildAt(0).requestFocus();
     }
 
-    /** The header opens launcher settings directly; hold OK keeps the extra home actions available. */
+    private void addControlCenterRow(LinearLayout rows, PopupWindow popup, int iconRes, String title, String subtitle, Runnable action) {
+        View row = getLayoutInflater().inflate(R.layout.item_input, rows, false);
+        ImageView icon = row.findViewById(R.id.icon);
+        if (iconRes != 0) {
+            icon.setImageResource(iconRes);
+            icon.setVisibility(View.VISIBLE);
+        } else {
+            icon.setVisibility(View.GONE);
+        }
+        row.findViewById(R.id.dot).setVisibility(View.GONE);
+        ((TextView) row.findViewById(R.id.title)).setText(title);
+
+        TextView status = row.findViewById(R.id.status);
+        if (subtitle != null && !subtitle.isEmpty()) {
+            status.setText(subtitle);
+            status.setVisibility(View.VISIBLE);
+        } else {
+            status.setVisibility(View.GONE);
+        }
+
+        row.setOnClickListener(v -> {
+            popup.dismiss();
+            action.run();
+        });
+
+        final boolean[] pressed = {false};
+        row.setOnKeyListener((v, code, event) -> {
+            if (code != KeyEvent.KEYCODE_DPAD_CENTER && code != KeyEvent.KEYCODE_ENTER) return false;
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                if (event.getRepeatCount() == 0) pressed[0] = true;
+                return true;
+            }
+            boolean activate = pressed[0];
+            pressed[0] = false;
+            if (activate) {
+                popup.dismiss();
+                action.run();
+            }
+            return true;
+        });
+        rows.addView(row);
+    }
+
+    private String getFreeMemorySubtitle() {
+        try {
+            android.app.ActivityManager am = (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
+            if (am != null) {
+                android.app.ActivityManager.MemoryInfo mi = new android.app.ActivityManager.MemoryInfo();
+                am.getMemoryInfo(mi);
+                long freeMb = mi.availMem / (1024 * 1024L);
+                return freeMb + " MB free";
+            }
+        } catch (Exception ignored) {}
+        return "Trim";
+    }
+
+    @android.annotation.SuppressLint("MissingPermission")
+    private void trimMemoryNow() {
+        try {
+            android.app.ActivityManager am = (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
+            if (am != null) {
+                android.app.ActivityManager.MemoryInfo before = new android.app.ActivityManager.MemoryInfo();
+                am.getMemoryInfo(before);
+
+                android.content.pm.PackageManager pm = getPackageManager();
+                List<ApplicationInfo> apps = pm.getInstalledApplications(0);
+                for (ApplicationInfo app : apps) {
+                    if (!app.packageName.equals(getPackageName())) {
+                        am.killBackgroundProcesses(app.packageName);
+                    }
+                }
+                System.gc();
+
+                android.app.ActivityManager.MemoryInfo after = new android.app.ActivityManager.MemoryInfo();
+                am.getMemoryInfo(after);
+                long delta = (after.availMem - before.availMem) / (1024 * 1024L);
+                if (delta > 0) {
+                    android.widget.Toast.makeText(this, "Freed " + delta + " MB RAM", android.widget.Toast.LENGTH_SHORT).show();
+                } else {
+                    android.widget.Toast.makeText(this, "Memory optimized", android.widget.Toast.LENGTH_SHORT).show();
+                }
+            }
+        } catch (Exception e) {
+            android.widget.Toast.makeText(this, "Memory optimized", android.widget.Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private String getStorageSubtitle() {
+        try {
+            File path = Environment.getDataDirectory();
+            StatFs stat = new StatFs(path.getPath());
+            long availBytes = stat.getAvailableBlocksLong() * stat.getBlockSizeLong();
+            long availGb = availBytes / (1024 * 1024 * 1024L);
+            if (availGb > 0) {
+                return String.format(java.util.Locale.US, "%.1f GB free", (float) availBytes / (1024 * 1024 * 1024L));
+            } else {
+                long availMb = availBytes / (1024 * 1024L);
+                return availMb + " MB free";
+            }
+        } catch (Exception ignored) {}
+        return "Manage";
+    }
+
+    // ---- launcher settings and module cards -------------------------------------------------------
+
+    /** Keep a normal Settings click for the TV; the launcher's choices live behind hold OK. */
     private void showSettingsMenu() {
         View anchor = findViewById(R.id.btnSettings);
         View panel = getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
         LinearLayout rows = panel.findViewById(R.id.rows);
         PopupWindow popup = glassPopup(panel, (int) (200 * density));
-        if (!launcherSettingsButton) addSettingsMenuRow(rows, popup, R.string.launcher_settings, () -> startActivityForResult(
+        addSettingsMenuRow(rows, popup, R.string.launcher_settings, () -> startActivityForResult(
                 new Intent(this, LauncherSettingsActivity.class), LAUNCHER_SETTINGS_REQUEST));
         if (moduleCards) addSettingsMenuRow(rows, popup, R.string.module_cards, this::showModuleCards);
         if (dockRow) addSettingsMenuRow(rows, popup, R.string.dock_edit, this::startDockEdit);
@@ -2892,60 +2916,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // Hebrew puts Settings at the left of the header: grow the menu inward from it.
         dropIn(popup, panel, anchor, getResources().getBoolean(R.bool.rtl_menu_bar)
                 ? Gravity.START : Gravity.END);
-        rows.getChildAt(0).requestFocus();
-    }
-
-    /**
-     * Hold OK on a tile: a glass menu next to it. Move starts reorder mode with this tile already picked up;
-     * Remove from Home takes the shortcut off (only with the app library on, where one press adds it back);
-     * App info opens the TV's page for the app, which is what holding OK used to do.
-     */
-    @Override
-    public void onTileLongPress(int position, View card) {
-        if (reordering) return;
-        String key = adapter.keyAt(position);
-        String pkg = adapter.packageAt(position);
-        // Empty dock slots and the Default-home tile carry the launcher's own package: no menu for them.
-        if (key == null || pkg == null || pkg.equals(getPackageName())) return;
-        View panel = getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
-        LinearLayout rows = panel.findViewById(R.id.rows);
-        PopupWindow popup = glassPopup(panel, (int) (200 * density));
-        if (dockRow && position < adapter.movableCount()) {
-            boolean inDock = position < COLUMNS;
-            addSettingsMenuRow(rows, popup, inDock ? R.string.tile_replace_in_dock : R.string.tile_add_to_dock,
-                    () -> startDockEditFor(key, inDock));
-        }
-        if (position < adapter.movableCount()) addSettingsMenuRow(rows, popup, R.string.tile_move, () -> {
-            if (!beginReorder()) return;
-            int at = adapter.positionOf(key);   // beginReorder can rebuild the tiles
-            if (at < 0) return;
-            focusTile(at);
-            pickUp(at);
-            Toast.makeText(this, R.string.reorder_hint, Toast.LENGTH_LONG).show();
-        });
-        if (appLibraryEnabled) addSettingsMenuRow(rows, popup, R.string.library_remove_shortcut, () -> {
-            if (LibraryApps.save(this, pkg, false)) reloadApps(false);
-            else Toast.makeText(this, R.string.library_save_failed, Toast.LENGTH_LONG).show();
-        });
-        addSettingsMenuRow(rows, popup, R.string.library_app_info, () -> open(new Intent(
-                Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + pkg))));
-        panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
-        popup.setWidth(Math.max((int) (200 * density), panel.getMeasuredWidth()));
-        // Dock tiles sit near the bottom of the screen: open the menu above the tile when it would not fit below.
-        int[] at = new int[2];
-        card.getLocationInWindow(at);
-        int gap = (int) (10 * density), height = panel.getMeasuredHeight();
-        if (at[1] + card.getHeight() + gap + height <= root.getHeight()) {
-            dropIn(popup, panel, card, Gravity.START);
-        } else {
-            panel.setAlpha(0f);
-            panel.setPivotY(height);
-            panel.setScaleY(0.92f);
-            panel.setTranslationY(8 * density);
-            popup.showAtLocation(root, Gravity.NO_GRAVITY, at[0], Math.max(0, at[1] - gap - height));
-            panel.animate().alpha(1f).scaleY(1f).translationY(0f).setDuration(220)
-                    .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f)).start();
-        }
         rows.getChildAt(0).requestFocus();
     }
 
@@ -3109,9 +3079,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         anchor.getLocationInWindow(at);
         int room = root.getHeight() - (at[1] + anchor.getHeight()) - (int) (34 * density);
         popup.setHeight(Math.min(panel.getMeasuredHeight(), Math.max(room, (int) (120 * density))));
-        // Hebrew places Settings on the left: align the outer panel inward, like its parent menu.
-        dropIn(popup, panel, anchor, getResources().getBoolean(R.bool.rtl_menu_bar)
-                ? Gravity.START : Gravity.END);
+        dropIn(popup, panel, anchor, Gravity.END);
         rows.getChildAt(0).requestFocus();
     }
 

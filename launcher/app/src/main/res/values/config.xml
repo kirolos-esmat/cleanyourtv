@@ -310,6 +310,13 @@
          only background_color or the wallpaper behind everything. Can also be set with "ambient_glow": false in a
          theme's config.json. -->
     <bool name="ambient_glow">true</bool>
+
+    <!-- Live weather widget above the date (Open-Meteo). Set show_weather false to disable network requests. -->
+    <bool name="show_weather">true</bool>
+    <string name="weather_latitude" translatable="false"></string>
+    <string name="weather_longitude" translatable="false"></string>
+    <string name="weather_place" translatable="false"></string>
+    <string name="weather_unit" translatable="false">celsius</string>
     <!-- The focus highlight glows in the focused app's colour on every tile, as the cinematic shelf does for the
          dock, without cinematic_home. Can also be set with "app_glow": true in a theme's config.json. -->
     <bool name="app_glow">false</bool>
