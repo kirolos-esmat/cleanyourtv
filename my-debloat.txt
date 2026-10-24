@@ -1,5 +1,8 @@
 # Xiaomi Mi Box S 2nd gen (MiTV-AFKR0, jaws) customized debloat list
-# Kept enabled per user choice: com.xiaomi.mitv.updateservice, com.mitv.tvhome.mitvplus (Xiaomi TV+), com.google.android.apps.mediashell (Google Cast & Screensaver Weather)
+# MANDATORY INVARIANTS (ENFORCED BY UNIT TESTS IN tests/test_menu_screensaver_guards.py):
+# 1. DO NOT DISABLE com.google.android.apps.tv.launcherx (provides hold-Home Quick Settings dashboard).
+# 2. DO NOT DISABLE com.google.android.apps.tv.dreamx or com.google.android.apps.mediashell (Ambient screensaver & Google Cast).
+# Kept enabled per user choice: com.xiaomi.mitv.updateservice, com.mitv.tvhome.mitvplus (Xiaomi TV+)
 
 # Telemetry and attribution
 com.miui.tv.analytics
