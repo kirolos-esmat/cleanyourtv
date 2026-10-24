@@ -132,6 +132,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private String sourcePanelAction;
     private String sourcePanelExtra;
     private boolean coocaaSources;
+    private List<String> extraInputApps = Collections.emptyList();
 
     private AppAdapter adapter;
     private RecyclerView grid;
@@ -392,6 +393,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         sourcePanelAction = cfg.sourcePanelAction;
         sourcePanelExtra = cfg.sourcePanelExtra;
         coocaaSources = cfg.coocaaSources;
+        extraInputApps = cfg.extraInputApps;
 
         root = findViewById(R.id.root);
         root.setBackgroundColor(cfg.backgroundColor);
@@ -1510,61 +1512,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             return true;
         }
         return false;
-    }
-
-    @Override
-    public void onTileLongPressed(int position, View card, AppAdapter.Entry entry) {
-        if (reordering || movingKey != null) {
-            endReorder();
-            return;
-        }
-        if (openPopup != null) {
-            openPopup.dismiss();
-            openPopup = null;
-        }
-        View panel = getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
-        LinearLayout rows = panel.findViewById(R.id.rows);
-        int width = (int) (180 * density);
-        final PopupWindow popup = glassPopup(panel, width);
-        openPopup = popup;
-
-        addInputRow(rows, popup, R.drawable.ic_move, getString(R.string.move_app), -1, () -> startMoving(position));
-        addSeparator(rows);
-        addInputRow(rows, popup, R.drawable.ic_settings, getString(R.string.app_info), -1, () -> {
-            Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + entry.pkg));
-            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            try {
-                startActivity(i);
-            } catch (ActivityNotFoundException ignored) {
-            }
-        });
-
-        popup.setOnDismissListener(() -> {
-            if (openPopup == popup) openPopup = null;
-            if (!reordering && movingKey == null) {
-                grid.post(() -> focusTile(lastFocused));
-            }
-        });
-
-        panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
-        int pWidth = Math.max(width, panel.getMeasuredWidth());
-        popup.setWidth(pWidth);
-        int pHeight = panel.getMeasuredHeight();
-
-        Rect r = new Rect(0, 0, card.getWidth(), card.getHeight());
-        root.offsetDescendantRectToMyCoords(card, r);
-        int gap = (int) (10 * density);
-        boolean openAbove = (r.bottom + gap + pHeight) > (root.getHeight() - (int) (16 * density));
-        int yOff = openAbove ? -(card.getHeight() + pHeight + gap) : gap;
-
-        panel.setAlpha(0f);
-        panel.setPivotY(openAbove ? pHeight : 0f);
-        panel.setScaleY(0.92f);
-        panel.setTranslationY(openAbove ? 8 * density : -8 * density);
-        popup.showAsDropDown(card, 0, yOff, Gravity.START);
-        panel.animate().alpha(1f).scaleY(1f).translationY(0f).setDuration(220)
-                .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f)).start();
-        rows.getChildAt(0).requestFocus();
     }
 
     private void startMoving(int position) {
@@ -2753,10 +2700,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             return;
         }
         boolean any = liveTvIntent() != null || !sourcePanelService.isEmpty()
-                || (coocaaSources && !CoocaaSources.list(this).isEmpty())
-                || isTvAppAvailable("com.mitv.tvhome.mitvplus")
-                || isTvAppAvailable("com.nst.iptvsmarterstvbox")
-                || isTvAppAvailable("com.nostalgiatv.nostalgia_tv");
+                || (coocaaSources && !CoocaaSources.list(this).isEmpty());
+        if (!any && extraInputApps != null) {
+            for (String pkg : extraInputApps) {
+                if (isTvAppAvailable(pkg)) {
+                    any = true;
+                    break;
+                }
+            }
+        }
         TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
         if (!any && tim != null) {
             for (TvInputInfo info : tim.getTvInputList()) {
@@ -3046,9 +2998,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             addInputRow(rows, popup, R.drawable.ic_livetv, title, -1, () -> open(liveTvIntent));
         }
 
-        addTvAppRow(rows, popup, "com.mitv.tvhome.mitvplus", "Xiaomi TV+");
-        addTvAppRow(rows, popup, "com.nst.iptvsmarterstvbox", "IPTV Smarters Pro");
-        addTvAppRow(rows, popup, "com.nostalgiatv.nostalgia_tv", "NostalgiaTV");
+        if (extraInputApps != null) {
+            for (String pkg : extraInputApps) {
+                addTvAppRow(rows, popup, pkg, null);
+            }
+        }
         if (rows.getChildCount() == 0) {
             Toast.makeText(this, R.string.no_inputs, Toast.LENGTH_SHORT).show();
             return;
@@ -3128,7 +3082,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             intent = getPackageManager().getLaunchIntentForPackage(pkg);
         }
         if (intent == null) return;
-        String title = fallbackTitle;
+        String title = fallbackTitle != null ? fallbackTitle : pkg;
         try {
             CharSequence label = getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(pkg, 0));
             if (label != null && label.length() > 0) {
@@ -3151,17 +3105,17 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         PopupWindow popup = glassPopup(panel, initialWidth);
 
         // 1. Turn Off Now (Standby)
-        addControlCenterRow(rows, popup, R.drawable.ic_lock, "Turn Off Now", "Standby", () -> {
+        addControlCenterRow(rows, popup, R.drawable.ic_lock, getString(R.string.cc_standby_title), getString(R.string.cc_standby_sub), () -> {
             HomeKeyService.standby();
         });
 
         // 2. Free Up Memory (RAM)
-        addControlCenterRow(rows, popup, R.drawable.ic_apps, "Free Up Memory", getFreeMemorySubtitle(), () -> {
+        addControlCenterRow(rows, popup, R.drawable.ic_apps, getString(R.string.cc_memory_title), getFreeMemorySubtitle(), () -> {
             trimMemoryNow();
         });
 
         // 3. Storage Cleaner
-        addControlCenterRow(rows, popup, R.drawable.ic_home_settings, "Storage Cleaner", getStorageSubtitle(), () -> {
+        addControlCenterRow(rows, popup, R.drawable.ic_home_settings, getString(R.string.cc_storage_title), getStorageSubtitle(), () -> {
             OnlineWallpaper.clearCache(this);
             try {
                 startActivity(new Intent(Settings.ACTION_INTERNAL_STORAGE_SETTINGS));
@@ -3171,7 +3125,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         });
 
         // 4. Sound Output
-        addControlCenterRow(rows, popup, R.drawable.ic_av, "Sound Output", "Audio & Bluetooth", () -> {
+        addControlCenterRow(rows, popup, R.drawable.ic_av, getString(R.string.cc_sound_title), getString(R.string.cc_sound_sub), () -> {
             try {
                 Intent soundIntent = new Intent();
                 soundIntent.setComponent(new ComponentName("com.android.tv.settings", "com.android.tv.settings.device.displaysound.DisplaySoundActivity"));
@@ -3182,8 +3136,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         });
 
         // 5. Shuffle Wallpaper
-        addControlCenterRow(rows, popup, R.drawable.ic_swap_vert, "Shuffle Wallpaper", "Next photo", () -> {
-            Toast.makeText(this, "Shuffling wallpaper...", Toast.LENGTH_SHORT).show();
+        addControlCenterRow(rows, popup, R.drawable.ic_swap_vert, getString(R.string.cc_shuffle_title), getString(R.string.cc_shuffle_sub), () -> {
+            Toast.makeText(this, R.string.cc_shuffling_toast, Toast.LENGTH_SHORT).show();
             if (wallpaperPlayer != null) wallpaperPlayer.shuffle();
         });
 
@@ -3244,10 +3198,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 android.app.ActivityManager.MemoryInfo mi = new android.app.ActivityManager.MemoryInfo();
                 am.getMemoryInfo(mi);
                 long freeMb = mi.availMem / (1024 * 1024L);
-                return freeMb + " MB free";
+                return getString(R.string.cc_memory_free, freeMb);
             }
         } catch (Exception ignored) {}
-        return "Trim";
+        return getString(R.string.cc_memory_trim);
     }
 
     @android.annotation.SuppressLint("MissingPermission")
@@ -3271,13 +3225,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 am.getMemoryInfo(after);
                 long delta = (after.availMem - before.availMem) / (1024 * 1024L);
                 if (delta > 0) {
-                    android.widget.Toast.makeText(this, "Freed " + delta + " MB RAM", android.widget.Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, getString(R.string.cc_memory_freed_toast, delta), Toast.LENGTH_SHORT).show();
                 } else {
-                    android.widget.Toast.makeText(this, "Memory optimized", android.widget.Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, R.string.cc_memory_optimized_toast, Toast.LENGTH_SHORT).show();
                 }
             }
         } catch (Exception e) {
-            android.widget.Toast.makeText(this, "Memory optimized", android.widget.Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, R.string.cc_memory_optimized_toast, Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -3288,13 +3242,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             long availBytes = stat.getAvailableBlocksLong() * stat.getBlockSizeLong();
             long availGb = availBytes / (1024 * 1024 * 1024L);
             if (availGb > 0) {
-                return String.format(java.util.Locale.US, "%.1f GB free", (float) availBytes / (1024 * 1024 * 1024L));
+                return String.format(Locale.getDefault(), getString(R.string.cc_storage_gb_free), (float) availBytes / (1024 * 1024 * 1024L));
             } else {
                 long availMb = availBytes / (1024 * 1024L);
-                return availMb + " MB free";
+                return getString(R.string.cc_storage_mb_free, availMb);
             }
         } catch (Exception ignored) {}
-        return "Manage";
+        return getString(R.string.cc_storage_manage);
     }
 
     // ---- launcher settings and module cards -------------------------------------------------------
@@ -3367,12 +3321,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     () -> startDockEditFor(key, inDock));
         }
         if (position < adapter.movableCount()) addSettingsMenuRow(rows, popup, R.string.tile_move, () -> {
-            if (!beginReorder()) return;
             int at = adapter.positionOf(key);   // beginReorder can rebuild the tiles
-            if (at < 0) return;
-            focusTile(at);
-            pickUp(at);
-            Toast.makeText(this, R.string.reorder_hint, Toast.LENGTH_LONG).show();
+            if (at < 0) at = position;
+            startMoving(at);
         });
         if (appLibraryEnabled) addSettingsMenuRow(rows, popup, R.string.library_remove_shortcut, () -> {
             if (LibraryApps.save(this, pkg, false)) reloadApps(false);

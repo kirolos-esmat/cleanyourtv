@@ -59,15 +59,17 @@ final class WallpaperPickerAdapter extends RecyclerView.Adapter<WallpaperPickerA
 
         boolean isSelected = item.key.equals(selectedKey);
         holder.itemView.setSelected(isSelected);
+        String state = isSelected ? (", " + context.getString(R.string.connected)) : "";
+        holder.itemView.setContentDescription(item.title + ", " + item.subtitle + state);
 
         if ("none".equals(item.key)) {
             holder.thumb.setImageDrawable(null);
-            holder.thumb.setBackgroundColor(0xFF101010);
+            holder.thumb.setBackgroundColor(context.getColor(R.color.card_none_bg));
         } else if (item.thumbSource != null && !item.thumbSource.isEmpty()) {
             WallpaperThumbnailLoader.load(context, item.thumbSource, holder.thumb);
         } else {
             holder.thumb.setImageDrawable(null);
-            holder.thumb.setBackgroundColor(0xFF222222);
+            holder.thumb.setBackgroundColor(context.getColor(R.color.card_surface_bg));
         }
 
         holder.itemView.setOnClickListener(v -> {

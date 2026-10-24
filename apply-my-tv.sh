@@ -20,8 +20,11 @@ adb -s "$TV_HOST:5555" shell pm enable com.google.android.apps.mediashell || tru
 adb -s "$TV_HOST:5555" shell pm enable com.google.android.apps.tv.dreamx || true
 adb -s "$TV_HOST:5555" shell am start-service -a com.google.cast.action.BIND -n com.google.android.apps.mediashell/.CastReceiverService || true
 
-echo "Setting system network location (approximate city weather for screensaver & clock)..."
-adb -s "$TV_HOST:5555" shell settings put secure location_mode 3
+ENABLE_WEATHER_LOCATION="${ENABLE_WEATHER_LOCATION:-1}"
+if [ "$ENABLE_WEATHER_LOCATION" = "1" ]; then
+    echo "Setting system network location (approximate city weather for screensaver & clock)..."
+    adb -s "$TV_HOST:5555" shell settings put secure location_mode 3 || true
+fi
 
 echo "Enforcing screensaver privacy while granting launcher location for weather..."
 adb -s "$TV_HOST:5555" shell pm revoke --user 0 com.google.android.apps.tv.dreamx android.permission.ACCESS_FINE_LOCATION 2>&1 || true
@@ -32,7 +35,11 @@ adb -s "$TV_HOST:5555" shell pm grant com.gathin.tvhome android.permission.ACCES
 adb -s "$TV_HOST:5555" shell pm grant com.gathin.tvhome android.permission.ACCESS_COARSE_LOCATION 2>&1 || true
 
 echo "Enabling HomeKeyService accessibility service..."
-adb -s "$TV_HOST:5555" shell settings put secure enabled_accessibility_services com.gathin.tvhome/.HomeKeyService
+CURRENT_SERVICES=$(adb -s "$TV_HOST:5555" shell settings get secure enabled_accessibility_services 2>/dev/null | tr -d '\r\n')
+if [[ ":$CURRENT_SERVICES:" != *":com.gathin.tvhome/.HomeKeyService:"* ]]; then
+    NEW_SERVICES="${CURRENT_SERVICES:+$CURRENT_SERVICES:}com.gathin.tvhome/.HomeKeyService"
+    adb -s "$TV_HOST:5555" shell settings put secure enabled_accessibility_services "$NEW_SERVICES"
+fi
 adb -s "$TV_HOST:5555" shell settings put secure accessibility_enabled 1
 
 echo "Configuring AdGuard ad-blocking Private DNS..."

@@ -35,6 +35,8 @@ final class RedditRssParser {
     private static final Pattern REDDIT_IMG_PATTERN = Pattern.compile("(?:href=[\"']|&quot;)(https://i\\.redd\\.it/[^\"'&\\s<>]+)");
     private static final Pattern FALLBACK_IMG_PATTERN = Pattern.compile("(?:href=[\"']|&quot;)(https://[^\"'&\\s<>]+\\.(?:jpg|jpeg|png|webp))", Pattern.CASE_INSENSITIVE);
 
+    private static final int MAX_FEED_CHARS = 512 * 1024; // 512 KB max
+
     static List<Entry> parse(InputStream in) {
         if (in == null) return Collections.emptyList();
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
@@ -42,6 +44,7 @@ final class RedditRssParser {
             String line;
             while ((line = reader.readLine()) != null) {
                 sb.append(line).append('\n');
+                if (sb.length() > MAX_FEED_CHARS) break;
             }
             return parse(sb.toString());
         } catch (Exception e) {

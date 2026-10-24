@@ -73,10 +73,10 @@ class MenuScreensaverGuardsTest(unittest.TestCase):
     def test_apply_script_does_not_disable_menu_or_screensaver(self):
         content = self.apply_script.read_text(encoding="utf-8")
         for pkg in (MENU_PACKAGE, DREAMX_PACKAGE, MEDIASHELL_PACKAGE):
-            pattern = rf"pm\s+disable(?:-user)?(?:\s+--user\s+\d+)?\s+{re.escape(pkg)}"
+            pattern = rf"pm\s+(?:disable(?:-user)?|clear)(?:\s+--user\s+\d+)?\s+{re.escape(pkg)}"
             self.assertIsNone(
                 re.search(pattern, content),
-                f"apply-my-tv.sh must not disable {pkg}",
+                f"apply-my-tv.sh must not disable or clear data for {pkg}",
             )
 
     def test_apply_script_enforces_screensaver_privacy(self):

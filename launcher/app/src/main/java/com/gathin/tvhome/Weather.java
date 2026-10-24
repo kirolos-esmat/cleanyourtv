@@ -74,12 +74,8 @@ final class Weather {
 
         long now = System.currentTimeMillis();
         long lastTime = p.getLong("time", 0);
-        long lastUpgradeAttempt = p.getLong("upgrade_attempt", 0);
-        // If location was previously from IP, try upgrading to device location if available, but at most once per day
-        boolean upgrade = !hasConfigCoords && !"device".equals(p.getString("src", "")) && locationOn(app)
-                && (now - lastUpgradeAttempt > LOCATION_MS);
 
-        if ((cached != null && now - lastTime < WEATHER_MS && !upgrade) || running) {
+        if ((cached != null && now - lastTime < WEATHER_MS) || running) {
             Log.d(TAG, "refresh not needed yet: running=" + running);
             return;
         }
@@ -127,20 +123,15 @@ final class Weather {
             } else {
                 long now = System.currentTimeMillis();
                 boolean staleLoc = now - p.getLong("locTime", 0) > LOCATION_MS || !p.contains("lat");
-                long lastUpgrade = p.getLong("upgrade_attempt", 0);
-                boolean upgrade = !"device".equals(p.getString("src", "")) && locationOn(ctx)
-                        && (now - lastUpgrade > LOCATION_MS);
-                Log.d(TAG, "resolving location: stale=" + staleLoc + " upgrade=" + upgrade);
-                if (staleLoc || upgrade) {
-                    if (upgrade) p.edit().putLong("upgrade_attempt", now).apply();
+                Log.d(TAG, "resolving location: stale=" + staleLoc);
+                if (staleLoc) {
                     boolean found = locateDevice(ctx, p);
-                    if (!found && staleLoc) found = locate(p, "https://ipwho.is/") || locate(p, "https://ipapi.co/json/");
                     if (!found && !p.contains("lat")) return null;
                 }
                 lat = Double.longBitsToDouble(p.getLong("lat", 0));
                 lon = Double.longBitsToDouble(p.getLong("lon", 0));
                 city = p.getString("city", "");
-                Log.d(TAG, "resolved coords: lat=" + lat + " lon=" + lon + " city=" + city + " src=" + p.getString("src", ""));
+                Log.d(TAG, "resolved coords: lat=" + lat + " lon=" + lon + " city=" + city);
             }
 
             String unit = "fahrenheit".equalsIgnoreCase(cfg.weatherUnit) ? "fahrenheit" : "celsius";
@@ -270,33 +261,6 @@ final class Weather {
             return true;
         } catch (Exception e) {
             Log.w(TAG, "locateDevice error: " + e);
-            return false;
-        }
-    }
-
-    private static boolean locate(SharedPreferences p, String url) {
-        try {
-            Log.d(TAG, "locate querying " + url);
-            String jsonStr = get(url);
-            JSONObject json = new JSONObject(jsonStr);
-            if (!json.has("latitude") || !json.has("longitude")) {
-                Log.w(TAG, "locate response missing coords: " + jsonStr);
-                return false;
-            }
-            double lat = json.getDouble("latitude");
-            double lon = json.getDouble("longitude");
-            String city = json.optString("city", "");
-            p.edit()
-                    .putLong("lat", Double.doubleToLongBits(lat))
-                    .putLong("lon", Double.doubleToLongBits(lon))
-                    .putString("city", city)
-                    .putLong("locTime", System.currentTimeMillis())
-                    .putString("src", "ip")
-                    .apply();
-            Log.d(TAG, "locate IP success: lat=" + lat + " lon=" + lon + " city=" + city);
-            return true;
-        } catch (Exception e) {
-            Log.w(TAG, "locate error querying " + url + ": " + e);
             return false;
         }
     }

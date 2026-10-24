@@ -133,6 +133,13 @@
     <string-array name="input_sources" translatable="false">
     </string-array>
 
+    <!-- Extra TV/IPTV apps offered at the bottom of the Inputs menu. Missing apps are skipped. -->
+    <string-array name="extra_input_apps" translatable="false">
+        <item>com.mitv.tvhome.mitvplus</item>
+        <item>com.nst.iptvsmarterstvbox</item>
+        <item>com.nostalgiatv.nostalgia_tv</item>
+    </string-array>
+
     <!-- Remote buttons that open Settings, by Linux scancode (HOME_KEY_SERVICE=1 build-and-install.sh). Remotes
          that send KEYCODE_SETTINGS need no entry. Some send a code Android does not map: the Xiaomi/Fengmi
          projector remote's gear button is scancode 384 (KEY_TAPE). Find yours with

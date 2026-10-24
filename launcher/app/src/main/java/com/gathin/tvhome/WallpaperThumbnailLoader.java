@@ -18,6 +18,8 @@ import java.util.concurrent.Executors;
 
 final class WallpaperThumbnailLoader {
     private static final int MAX_MEMORY_CACHE_BYTES = 6 * 1024 * 1024; // 6 MB
+    private static final long MAX_THUMB_BYTES = 3 * 1024 * 1024L; // 3 MB max
+    private static final int MAX_DISK_FILES = 40;
     private static final int TARGET_WIDTH = 320;
     private static final int TARGET_HEIGHT = 180;
 
@@ -86,6 +88,14 @@ final class WallpaperThumbnailLoader {
         File cacheDir = new File(context.getCacheDir(), "wp_thumbs");
         if (!cacheDir.exists()) cacheDir.mkdirs();
 
+        File[] existing = cacheDir.listFiles();
+        if (existing != null && existing.length > MAX_DISK_FILES) {
+            java.util.Arrays.sort(existing, (a, b) -> Long.compare(a.lastModified(), b.lastModified()));
+            for (int i = 0; i < existing.length - (MAX_DISK_FILES / 2); i++) {
+                existing[i].delete();
+            }
+        }
+
         String filename = "thumb_" + Math.abs(urlString.hashCode()) + ".jpg";
         File diskFile = new File(cacheDir, filename);
 
@@ -101,10 +111,22 @@ final class WallpaperThumbnailLoader {
             conn.setConnectTimeout(8000);
             conn.setReadTimeout(8000);
             if (conn.getResponseCode() == 200) {
+                long lenHeader = conn.getContentLengthLong();
+                if (lenHeader > MAX_THUMB_BYTES) return null;
+                String type = conn.getContentType();
+                if (type != null && !type.startsWith("image/") && !type.startsWith("application/octet-stream")) {
+                    return null;
+                }
+                long total = 0;
                 try (InputStream in = conn.getInputStream(); FileOutputStream out = new FileOutputStream(tempFile)) {
                     byte[] buf = new byte[4096];
                     int len;
                     while ((len = in.read(buf)) != -1) {
+                        total += len;
+                        if (total > MAX_THUMB_BYTES) {
+                            tempFile.delete();
+                            return null;
+                        }
                         out.write(buf, 0, len);
                     }
                 }

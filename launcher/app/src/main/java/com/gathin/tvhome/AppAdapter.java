@@ -57,9 +57,6 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         /** Return true if click was consumed (e.g. finishing Move mode). */
         boolean onTileClicked(int position, Entry entry);
 
-        /** Called when OK is held on a tile. */
-        void onTileLongPressed(int position, View card, Entry entry);
-
         void onLibraryRequested();
         void onLibraryFocused();
         /** Hold OK on a tile: the activity shows the tile menu (move, remove from Home, app info). */
@@ -507,7 +504,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         h.card.setOnLongClickListener(v -> {
             int pos = h.getBindingAdapterPosition();
             if (listener != null && pos != RecyclerView.NO_POSITION) {
-                listener.onTileLongPressed(pos, v, e);
+                listener.onTileLongPress(pos, v);
             }
             return true;
         });

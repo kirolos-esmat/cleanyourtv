@@ -14,14 +14,15 @@
         android:layout_width="match_parent"
         android:layout_height="100dp"
         android:scaleType="centerCrop"
-        android:background="#FF222222" />
+        android:importantForAccessibility="no"
+        android:background="@color/card_surface_bg" />
 
     <TextView
         android:id="@+id/cardTitle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        android:textColor="#FFFFFFFF"
+        android:textColor="@color/text_primary"
         android:textSize="13sp"
         android:fontFamily="@font/outfit_medium"
         android:singleLine="true"
@@ -31,7 +32,7 @@
         android:id="@+id/cardSubtitle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textColor="#FFAAAAAA"
+        android:textColor="@color/text_secondary"
         android:textSize="11sp"
         android:fontFamily="@font/outfit"
         android:singleLine="true"

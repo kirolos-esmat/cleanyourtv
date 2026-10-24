@@ -141,7 +141,21 @@ if [ ! -f "$CACHE_APK" ]; then
         LATEST_URL="https://github.com/jqssun/android-airplay-server/releases/download/v0.0.36/app-release.apk"
     fi
     echo "Downloading from: $LATEST_URL"
-    curl -L -o "$CACHE_APK" "$LATEST_URL"
+    TMP_APK="$CACHE_APK.tmp"
+    rm -f "$TMP_APK"
+    curl -fsSL --connect-timeout 15 --max-time 120 -o "$TMP_APK" "$LATEST_URL"
+    if [ ! -s "$TMP_APK" ]; then
+        echo "   [error] Downloaded APK is empty or failed" >&2
+        rm -f "$TMP_APK"
+        exit 1
+    fi
+    MAGIC=$(head -c 4 "$TMP_APK" 2>/dev/null || true)
+    if [ "$MAGIC" != "PK$(printf '\003\004')" ]; then
+        echo "   [error] Downloaded file is not a valid APK package" >&2
+        rm -f "$TMP_APK"
+        exit 1
+    fi
+    mv "$TMP_APK" "$CACHE_APK"
 fi
 
 echo "==> Installing AirPlay receiver ($CACHE_APK)..."

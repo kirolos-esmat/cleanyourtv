@@ -3,7 +3,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:background="#EE101318"
+    android:background="@color/dialog_surface_bg"
     android:padding="20dp">
 
     <LinearLayout
@@ -18,7 +18,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="@string/wallpaper_label"
-            android:textColor="#FFFFFFFF"
+            android:textColor="@color/text_primary"
             android:textSize="20sp"
             android:textStyle="bold"
             android:fontFamily="@font/outfit_medium" />
@@ -27,21 +27,22 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginEnd="10dp"
-            android:text="Rotation:"
-            android:textColor="#FFAAAAAA"
+            android:text="@string/wallpaper_rotation_prefix"
+            android:textColor="@color/text_secondary"
             android:textSize="14sp"
             android:fontFamily="@font/outfit" />
 
         <Button
             android:id="@+id/btnInterval"
             android:layout_width="wrap_content"
-            android:layout_height="36dp"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
             android:background="@drawable/settings_choice_bg"
-            android:textColor="#FFFFFFFF"
+            android:textColor="@color/text_primary"
             android:textSize="13sp"
             android:paddingStart="14dp"
             android:paddingEnd="14dp"
-            android:text="Off"
+            android:text="@string/rotation_off"
             android:fontFamily="@font/outfit_medium"
             android:focusable="true" />
     </LinearLayout>
@@ -49,7 +50,8 @@
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/wallpaperGrid"
         android:layout_width="match_parent"
-        android:layout_height="380dp"
+        android:layout_height="0dp"
+        android:layout_weight="1"
         android:clipToPadding="false"
         android:scrollbars="vertical"
         android:descendantFocusability="afterDescendants"

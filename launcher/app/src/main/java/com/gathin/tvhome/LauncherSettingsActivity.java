@@ -22,6 +22,7 @@ import java.util.List;
 
 /** Remote-friendly settings owned by the launcher; system settings stay one row away. */
 public final class LauncherSettingsActivity extends Activity {
+    private static final java.util.concurrent.ExecutorService BG = java.util.concurrent.Executors.newSingleThreadExecutor();
     static final String EXTRA_REORDER = "com.gathin.tvhome.extra.REORDER_FROM_SETTINGS";
     private SharedPreferences choices;
     private final TextView[] columnChoices = new TextView[4];
@@ -174,7 +175,15 @@ public final class LauncherSettingsActivity extends Activity {
         Button btnInterval = dialogView.findViewById(R.id.btnInterval);
 
         int[] intervals = {0, 5, 15, 30, 60, 360, 1440};
-        String[] intervalLabels = {"Off", "5 min", "15 min", "30 min", "1 hour", "6 hours", "Daily"};
+        int[] intervalRes = {
+                R.string.rotation_off,
+                R.string.interval_5m,
+                R.string.interval_15m,
+                R.string.interval_30m,
+                R.string.interval_1h,
+                R.string.interval_6h,
+                R.string.interval_daily
+        };
         int currentMins = choices.getInt("wallpaper_rotation_minutes", 0);
         int currentIdx = 0;
         for (int i = 0; i < intervals.length; i++) {
@@ -184,12 +193,12 @@ public final class LauncherSettingsActivity extends Activity {
             }
         }
         final int[] selectedIntervalIdx = {currentIdx};
-        btnInterval.setText(intervalLabels[selectedIntervalIdx[0]]);
+        btnInterval.setText(getString(intervalRes[selectedIntervalIdx[0]]));
         btnInterval.setOnClickListener(v -> {
             selectedIntervalIdx[0] = (selectedIntervalIdx[0] + 1) % intervals.length;
             int newMins = intervals[selectedIntervalIdx[0]];
             choices.edit().putInt("wallpaper_rotation_minutes", newMins).apply();
-            btnInterval.setText(intervalLabels[selectedIntervalIdx[0]]);
+            btnInterval.setText(getString(intervalRes[selectedIntervalIdx[0]]));
             changed();
         });
 
@@ -198,60 +207,60 @@ public final class LauncherSettingsActivity extends Activity {
         // 1. Reddit r/wallpapers (Hot)
         items.add(new WallpaperPickerAdapter.Item(
                 OnlineWallpaper.CHOICE_REDDIT,
-                "Reddit Wallpapers",
-                "r/wallpapers (Hot Feed)",
+                getString(R.string.wp_reddit_title),
+                getString(R.string.wp_reddit_sub),
                 "https://preview.redd.it/c7p9uw1miowh1.jpeg?width=640"
         ));
 
         // 2. Daily Bing
         items.add(new WallpaperPickerAdapter.Item(
                 OnlineWallpaper.CHOICE_BING,
-                "Daily Bing",
-                "8 Daily Archive Images",
+                getString(R.string.wp_bing_title),
+                getString(R.string.wp_bing_sub),
                 OnlineWallpaper.CHOICE_BING
         ));
 
         // 3. Curated Unsplash Photos
         items.add(new WallpaperPickerAdapter.Item(
                 OnlineWallpaper.CHOICE_NATURE,
-                "Nature Gallery",
-                OnlineWallpaper.IDS_NATURE.length + " Curated Wallpapers",
+                getString(R.string.wp_nature_title),
+                getString(R.string.wp_curated_count, OnlineWallpaper.IDS_NATURE.length),
                 OnlineWallpaper.URL_NATURE
         ));
         items.add(new WallpaperPickerAdapter.Item(
                 OnlineWallpaper.CHOICE_AURORA,
-                "Aurora Gallery",
-                OnlineWallpaper.IDS_AURORA.length + " Curated Wallpapers",
+                getString(R.string.wp_aurora_title),
+                getString(R.string.wp_curated_count, OnlineWallpaper.IDS_AURORA.length),
                 OnlineWallpaper.URL_AURORA
         ));
         items.add(new WallpaperPickerAdapter.Item(
                 OnlineWallpaper.CHOICE_SPACE,
-                "Deep Space Gallery",
-                OnlineWallpaper.IDS_SPACE.length + " Curated Wallpapers",
+                getString(R.string.wp_space_title),
+                getString(R.string.wp_curated_count, OnlineWallpaper.IDS_SPACE.length),
                 OnlineWallpaper.URL_SPACE
         ));
         items.add(new WallpaperPickerAdapter.Item(
                 OnlineWallpaper.CHOICE_DARK,
-                "Minimal Dark Gallery",
-                OnlineWallpaper.IDS_DARK.length + " Curated Wallpapers",
+                getString(R.string.wp_dark_title),
+                getString(R.string.wp_curated_count, OnlineWallpaper.IDS_DARK.length),
                 OnlineWallpaper.URL_DARK
         ));
         items.add(new WallpaperPickerAdapter.Item(
                 OnlineWallpaper.CHOICE_RETRO,
-                "Old Tech Gallery",
-                OnlineWallpaper.IDS_RETRO.length + " Curated Wallpapers",
+                getString(R.string.wp_retro_title),
+                getString(R.string.wp_curated_count, OnlineWallpaper.IDS_RETRO.length),
                 OnlineWallpaper.URL_RETRO
         ));
         items.add(new WallpaperPickerAdapter.Item(
                 OnlineWallpaper.CHOICE_HOGWARTS,
-                "Harry Potter & Hogwarts",
-                OnlineWallpaper.IDS_HOGWARTS.length + " Curated Wallpapers",
+                getString(R.string.wp_hogwarts_title),
+                getString(R.string.wp_curated_count, OnlineWallpaper.IDS_HOGWARTS.length),
                 OnlineWallpaper.URL_HOGWARTS
         ));
         items.add(new WallpaperPickerAdapter.Item(
                 OnlineWallpaper.CHOICE_MINIMAL,
-                "Minimal Gallery",
-                OnlineWallpaper.IDS_MINIMAL.length + " Curated Wallpapers",
+                getString(R.string.wp_minimal_title),
+                getString(R.string.wp_curated_count, OnlineWallpaper.IDS_MINIMAL.length),
                 OnlineWallpaper.URL_MINIMAL
         ));
 
@@ -266,7 +275,7 @@ public final class LauncherSettingsActivity extends Activity {
             items.add(new WallpaperPickerAdapter.Item(
                     img.getName(),
                     img.getName().replace(".jpg", "").replace(".png", "").replace(".webp", ""),
-                    "Local / Scene",
+                    getString(R.string.wp_local_scene),
                     img.getAbsolutePath()
             ));
         }
@@ -275,7 +284,7 @@ public final class LauncherSettingsActivity extends Activity {
         items.add(new WallpaperPickerAdapter.Item(
                 "none",
                 getString(R.string.wallpaper_none),
-                "Solid Dark",
+                getString(R.string.wp_solid_dark),
                 ""
         ));
 
@@ -296,24 +305,30 @@ public final class LauncherSettingsActivity extends Activity {
         });
         grid.setAdapter(adapter);
 
+        int maxGridHeight = (int) (getResources().getDisplayMetrics().heightPixels * 0.65f);
+        if (grid.getLayoutParams() != null) {
+            grid.getLayoutParams().height = maxGridHeight;
+        }
+
         dialog.show();
         grid.post(() -> {
             View first = grid.getChildAt(0);
             if (first != null) first.requestFocus();
         });
 
-        // Background thread: enrich Reddit thumbnail from live feed if available
-        new Thread(() -> {
+        // Background task: enrich Reddit thumbnail from live feed if available
+        BG.execute(() -> {
             java.util.List<RedditRssParser.Entry> redditEntries = OnlineWallpaper.fetchRedditWallpapers();
             if (!redditEntries.isEmpty()) {
                 String latestThumb = redditEntries.get(0).thumbnailUrl;
                 runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed() || !dialog.isShowing()) return;
                     for (int i = 0; i < items.size(); i++) {
                         if (OnlineWallpaper.CHOICE_REDDIT.equals(items.get(i).key)) {
                             items.set(i, new WallpaperPickerAdapter.Item(
                                     OnlineWallpaper.CHOICE_REDDIT,
-                                    "Reddit Wallpapers",
-                                    "r/wallpapers (" + redditEntries.size() + " photos)",
+                                    getString(R.string.wp_reddit_title),
+                                    getString(R.string.wp_reddit_sub_count, redditEntries.size()),
                                     latestThumb
                             ));
                             adapter.notifyItemChanged(i);
@@ -322,7 +337,7 @@ public final class LauncherSettingsActivity extends Activity {
                     }
                 });
             }
-        }).start();
+        });
     }
 
     /**

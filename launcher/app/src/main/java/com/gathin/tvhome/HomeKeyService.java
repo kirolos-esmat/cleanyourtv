@@ -431,8 +431,8 @@ public class HomeKeyService extends AccessibilityService {
         try {
             CharSequence desc = focused.getContentDescription();
             CharSequence text = focused.getText();
-            boolean isHelp = (desc != null && desc.toString().toLowerCase().contains("help"))
-                    || (text != null && text.toString().toLowerCase().contains("help"));
+            boolean isHelp = (desc != null && desc.toString().toLowerCase(java.util.Locale.ROOT).contains("help"))
+                    || (text != null && text.toString().toLowerCase(java.util.Locale.ROOT).contains("help"));
 
             if (isHelp) {
                 if (code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_LEFT) {
@@ -468,8 +468,8 @@ public class HomeKeyService extends AccessibilityService {
                     try {
                         CharSequence nextDesc = nextDown.getContentDescription();
                         CharSequence nextText = nextDown.getText();
-                        if ((nextDesc != null && nextDesc.toString().toLowerCase().contains("help"))
-                                || (nextText != null && nextText.toString().toLowerCase().contains("help"))) {
+                        if ((nextDesc != null && nextDesc.toString().toLowerCase(java.util.Locale.ROOT).contains("help"))
+                                || (nextText != null && nextText.toString().toLowerCase(java.util.Locale.ROOT).contains("help"))) {
                             // Don't descend into dead footer Help & feedback icon
                             lastHandledNavKey = code;
                             return true;
