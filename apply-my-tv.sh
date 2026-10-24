@@ -23,9 +23,11 @@ adb -s "$TV_HOST:5555" shell am start-service -a com.google.cast.action.BIND -n 
 echo "Setting system network location (approximate city weather for screensaver & clock)..."
 adb -s "$TV_HOST:5555" shell settings put secure location_mode 3
 
-echo "Granting location permissions for screensaver ambient weather and launcher clock/weather..."
-adb -s "$TV_HOST:5555" shell pm grant com.google.android.apps.tv.dreamx android.permission.ACCESS_COARSE_LOCATION 2>&1 || true
-adb -s "$TV_HOST:5555" shell pm grant com.google.android.apps.tv.dreamx android.permission.ACCESS_FINE_LOCATION 2>&1 || true
+echo "Enforcing screensaver privacy while granting launcher location for weather..."
+adb -s "$TV_HOST:5555" shell pm revoke --user 0 com.google.android.apps.tv.dreamx android.permission.ACCESS_FINE_LOCATION 2>&1 || true
+adb -s "$TV_HOST:5555" shell pm revoke --user 0 com.google.android.apps.tv.dreamx android.permission.ACCESS_COARSE_LOCATION 2>&1 || true
+adb -s "$TV_HOST:5555" shell pm revoke --user 10 com.google.android.apps.tv.dreamx android.permission.ACCESS_FINE_LOCATION 2>&1 || true
+adb -s "$TV_HOST:5555" shell pm revoke --user 10 com.google.android.apps.tv.dreamx android.permission.ACCESS_COARSE_LOCATION 2>&1 || true
 adb -s "$TV_HOST:5555" shell pm grant com.gathin.tvhome android.permission.ACCESS_FINE_LOCATION 2>&1 || true
 adb -s "$TV_HOST:5555" shell pm grant com.gathin.tvhome android.permission.ACCESS_COARSE_LOCATION 2>&1 || true
 
