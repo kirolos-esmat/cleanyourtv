@@ -24,4 +24,8 @@ com.android.printspooler
 # Key remapper replaced by built-in HomeKeyService
 flar2.homebutton
 
-
+# Stock Google TV launcher & setup wizard
+# KEEP com.google.android.apps.tv.launcherx enabled: provides the hold-Home Google TV quick-settings/dashboard panel.
+# HomeKeyService automatically redirects stock HomeActivity to CleanYourTV while allowing DashboardActivity.
+# com.google.android.apps.tv.launcherx
+com.google.android.tungsten.setupwraith
