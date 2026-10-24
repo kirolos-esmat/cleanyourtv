@@ -15,18 +15,17 @@ TV_HOST="$TV_HOST" ./tools/disable.sh my-debloat.txt
 echo "Ensuring com.gathin.tvhome is default Home..."
 adb -s "$TV_HOST:5555" shell cmd package set-home-activity com.gathin.tvhome/.MainActivity || true
 
-echo "Ensuring Google Cast & Ambient MediaShell is enabled and running..."
+echo "Ensuring Google Cast & Ambient MediaShell and Screensaver (dreamx) are enabled..."
 adb -s "$TV_HOST:5555" shell pm enable com.google.android.apps.mediashell || true
+adb -s "$TV_HOST:5555" shell pm enable com.google.android.apps.tv.dreamx || true
 adb -s "$TV_HOST:5555" shell am start-service -a com.google.cast.action.BIND -n com.google.android.apps.mediashell/.CastReceiverService || true
 
 echo "Setting system network location (approximate city weather for screensaver & clock)..."
 adb -s "$TV_HOST:5555" shell settings put secure location_mode 3
 
-echo "Enforcing screensaver privacy while granting launcher location for weather..."
-adb -s "$TV_HOST:5555" shell pm revoke --user 0 com.google.android.apps.tv.dreamx android.permission.ACCESS_FINE_LOCATION 2>&1 || true
-adb -s "$TV_HOST:5555" shell pm revoke --user 0 com.google.android.apps.tv.dreamx android.permission.ACCESS_COARSE_LOCATION 2>&1 || true
-adb -s "$TV_HOST:5555" shell pm revoke --user 10 com.google.android.apps.tv.dreamx android.permission.ACCESS_FINE_LOCATION 2>&1 || true
-adb -s "$TV_HOST:5555" shell pm revoke --user 10 com.google.android.apps.tv.dreamx android.permission.ACCESS_COARSE_LOCATION 2>&1 || true
+echo "Granting location permissions for screensaver ambient weather and launcher clock/weather..."
+adb -s "$TV_HOST:5555" shell pm grant com.google.android.apps.tv.dreamx android.permission.ACCESS_COARSE_LOCATION 2>&1 || true
+adb -s "$TV_HOST:5555" shell pm grant com.google.android.apps.tv.dreamx android.permission.ACCESS_FINE_LOCATION 2>&1 || true
 adb -s "$TV_HOST:5555" shell pm grant com.gathin.tvhome android.permission.ACCESS_FINE_LOCATION 2>&1 || true
 adb -s "$TV_HOST:5555" shell pm grant com.gathin.tvhome android.permission.ACCESS_COARSE_LOCATION 2>&1 || true
 
