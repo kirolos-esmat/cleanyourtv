@@ -138,6 +138,7 @@ public final class LauncherSettingsActivity extends Activity {
             if (!hasOnTvChoices()) return;
             choices.edit().remove("columns").remove(Config.ROWS_BELOW_DOCK_KEY).remove("animations")
                     .remove("advanced_effects").remove(Config.WALLPAPER_CHOICE_KEY)
+                    .remove("wallpaper_rotation_minutes")
                     .remove(Config.AMBIENT_GLOW_KEY)
                     .remove(Config.DOCK_OPACITY_KEY).commit();
             Config current = Config.load(this);
@@ -189,7 +190,7 @@ public final class LauncherSettingsActivity extends Activity {
             int newMins = intervals[selectedIntervalIdx[0]];
             choices.edit().putInt("wallpaper_rotation_minutes", newMins).apply();
             btnInterval.setText(intervalLabels[selectedIntervalIdx[0]]);
-            setResult(RESULT_OK);
+            changed();
         });
 
         List<WallpaperPickerAdapter.Item> items = new java.util.ArrayList<>();
@@ -214,26 +215,44 @@ public final class LauncherSettingsActivity extends Activity {
         items.add(new WallpaperPickerAdapter.Item(
                 OnlineWallpaper.CHOICE_NATURE,
                 "Nature Gallery",
-                "18 Curated Wallpapers",
+                OnlineWallpaper.IDS_NATURE.length + " Curated Wallpapers",
                 OnlineWallpaper.URL_NATURE
         ));
         items.add(new WallpaperPickerAdapter.Item(
                 OnlineWallpaper.CHOICE_AURORA,
                 "Aurora Gallery",
-                "15 Curated Wallpapers",
+                OnlineWallpaper.IDS_AURORA.length + " Curated Wallpapers",
                 OnlineWallpaper.URL_AURORA
         ));
         items.add(new WallpaperPickerAdapter.Item(
                 OnlineWallpaper.CHOICE_SPACE,
                 "Deep Space Gallery",
-                "12 Curated Wallpapers",
+                OnlineWallpaper.IDS_SPACE.length + " Curated Wallpapers",
                 OnlineWallpaper.URL_SPACE
         ));
         items.add(new WallpaperPickerAdapter.Item(
                 OnlineWallpaper.CHOICE_DARK,
                 "Minimal Dark Gallery",
-                "12 Curated Wallpapers",
+                OnlineWallpaper.IDS_DARK.length + " Curated Wallpapers",
                 OnlineWallpaper.URL_DARK
+        ));
+        items.add(new WallpaperPickerAdapter.Item(
+                OnlineWallpaper.CHOICE_RETRO,
+                "Old Tech Gallery",
+                OnlineWallpaper.IDS_RETRO.length + " Curated Wallpapers",
+                OnlineWallpaper.URL_RETRO
+        ));
+        items.add(new WallpaperPickerAdapter.Item(
+                OnlineWallpaper.CHOICE_HOGWARTS,
+                "Harry Potter & Hogwarts",
+                OnlineWallpaper.IDS_HOGWARTS.length + " Curated Wallpapers",
+                OnlineWallpaper.URL_HOGWARTS
+        ));
+        items.add(new WallpaperPickerAdapter.Item(
+                OnlineWallpaper.CHOICE_MINIMAL,
+                "Minimal Gallery",
+                OnlineWallpaper.IDS_MINIMAL.length + " Curated Wallpapers",
+                OnlineWallpaper.URL_MINIMAL
         ));
 
         // 4. Local theme wallpapers / scenes
@@ -271,7 +290,7 @@ public final class LauncherSettingsActivity extends Activity {
         WallpaperPickerAdapter adapter = new WallpaperPickerAdapter(this, items, currentChoice, item -> {
             dialog.dismiss();
             choices.edit().putString(Config.WALLPAPER_CHOICE_KEY, item.key).apply();
-            setResult(RESULT_OK);
+            changed();
             Toast.makeText(this, R.string.wallpaper_applied, Toast.LENGTH_SHORT).show();
             refresh();
         });
@@ -360,6 +379,7 @@ public final class LauncherSettingsActivity extends Activity {
         return choices.contains("columns") || choices.contains(Config.ROWS_BELOW_DOCK_KEY)
                 || choices.contains("animations") || choices.contains("advanced_effects")
                 || choices.contains(Config.WALLPAPER_CHOICE_KEY)
+                || choices.contains("wallpaper_rotation_minutes")
                 || choices.contains(Config.AMBIENT_GLOW_KEY)
                 || choices.contains(Config.DOCK_OPACITY_KEY);
     }

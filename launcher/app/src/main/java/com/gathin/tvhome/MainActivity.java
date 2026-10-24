@@ -100,6 +100,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private static final int LAUNCHER_SETTINGS_REQUEST = 42;
     /** Sent by QuickSettingsActivity: open Launcher settings from here so Home rebuilds when they close. */
     static final String ACTION_LAUNCHER_SETTINGS = "com.gathin.tvhome.action.LAUNCHER_SETTINGS";
+    /** Action to trigger an immediate wallpaper shuffle. */
+    static final String ACTION_SHUFFLE_WALLPAPER = "com.gathin.tvhome.action.SHUFFLE_WALLPAPER";
     /** The system input switcher, forwarded here by InputsRequestActivity while handle_view_inputs is on. */
     static final String ACTION_VIEW_INPUTS = "com.android.tv.action.VIEW_INPUTS";
     /** Tiles per row and dock slots (res/values/config.xml, columns). Set in onCreate. */
@@ -398,6 +400,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // the theme's background, so launch looks the same.
         getWindow().setBackgroundDrawable(null);
         wallpaperPlayer = new WallpaperPlayer(this, root, cfg);
+        View topScrim = findViewById(R.id.topScrim);
+        if (topScrim != null) {
+            boolean hasWallpaper = cfg.wallpaperEnabled && (cfg.wallpaper != null
+                    || !cfg.wallpapers.isEmpty() || OnlineWallpaper.isOnlineChoice(cfg.wallpaperChoice));
+            topScrim.setVisibility(hasWallpaper ? View.VISIBLE : View.GONE);
+        }
         sky = findViewById(R.id.sky);
         sky.setIntensity(cfg.skyIntensity);
         glass = findViewById(R.id.glass);
@@ -742,7 +750,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     .build(), vpnCallback);
         }
         // Not after recreate(): the launch intent survives it and would open the settings again.
-        if (savedInstanceState == null && !openLauncherSettingsIfAsked(getIntent())) openInputsIfAsked(getIntent());
+        if (savedInstanceState == null && !openLauncherSettingsIfAsked(getIntent()) && !openInputsIfAsked(getIntent())) {
+            shuffleWallpaperIfAsked(getIntent());
+        }
     }
 
     /**
@@ -795,6 +805,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         return true;
     }
 
+    private boolean shuffleWallpaperIfAsked(Intent intent) {
+        if (intent == null || !ACTION_SHUFFLE_WALLPAPER.equals(intent.getAction())) return false;
+        setIntent(new Intent(Intent.ACTION_MAIN));
+        if (wallpaperPlayer != null) {
+            Toast.makeText(this, "Shuffling wallpaper...", Toast.LENGTH_SHORT).show();
+            wallpaperPlayer.shuffle();
+        }
+        return true;
+    }
+
     /**
      * Home pressed while Home is already in front: singleTask delivers it here, then onResume runs.
      * Back to the top with the first dock tile focused, like the stock launcher. Back from an app
@@ -805,6 +825,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         super.onNewIntent(intent);
         if (openLauncherSettingsIfAsked(intent)) return;
         if (openInputsIfAsked(intent)) return;
+        if (shuffleWallpaperIfAsked(intent)) return;
         if (intent == null || !intent.hasCategory(Intent.CATEGORY_HOME)) return;
         grid.scrollToPosition(0);
         lastFocused = 0;
@@ -1904,6 +1925,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 View dot = new View(this);
                 GradientDrawable bg = new GradientDrawable();
                 bg.setCornerRadius(3 * density);
+                bg.setStroke((int) Math.max(1, density * 0.5f), 0x4D000000);
                 dot.setBackground(bg);
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams((int) (6 * density), (int) (6 * density));
                 if (i > 0) lp.leftMargin = (int) (6 * density);
@@ -1913,7 +1935,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         for (int i = 0; i < count; i++) {
             View dot = heroDots.getChildAt(rtlAppGrid ? count - 1 - i : i);
             boolean on = i == position;
-            ((GradientDrawable) dot.getBackground()).setColor(on ? 0xFFFFFFFF : 0x4DFFFFFF);
+            ((GradientDrawable) dot.getBackground()).setColor(on ? 0xFFFFFFFF : 0x66FFFFFF);
             ViewGroup.LayoutParams lp = dot.getLayoutParams();
             int w = (int) ((on ? 20 : 6) * density);
             if (lp.width != w) {

@@ -69,7 +69,9 @@ final class WallpaperPlayer {
         preferences = context.getSharedPreferences("wallpaper_rotation", Context.MODE_PRIVATE);
         // Playback state belongs to one collection. Changing the collection starts from its first
         // picture instead of resuming a filename that belonged to the previous one.
-        String collection = collectionKey(files);
+        String collection = OnlineWallpaper.isOnlineChoice(onlineChoice)
+                ? ("online:" + onlineChoice)
+                : collectionKey(files);
         if (!collection.equals(preferences.getString("collection", ""))) {
             preferences.edit().putString("collection", collection)
                     .remove("image").remove("changed").apply();
@@ -106,6 +108,9 @@ final class WallpaperPlayer {
                 if (bitmap != null) {
                     image.setImageBitmap(bitmap);
                     displayed = onlineChoice;
+                    if (preferences.getLong("changed", 0) == 0) {
+                        preferences.edit().putLong("changed", System.currentTimeMillis()).apply();
+                    }
                     return;
                 }
             }
@@ -152,6 +157,7 @@ final class WallpaperPlayer {
                         }
                         applyBitmapWithCrossfade(bmp);
                         displayed = onlineChoice;
+                        preferences.edit().putLong("changed", System.currentTimeMillis()).apply();
                     }
                 }
             });
