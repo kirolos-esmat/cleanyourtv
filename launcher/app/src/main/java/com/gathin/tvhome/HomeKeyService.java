@@ -94,6 +94,7 @@ public class HomeKeyService extends AccessibilityService {
     protected void onServiceConnected() {
         super.onServiceConnected();
         instance = this;
+        ServiceRepair.connected(this, getClass());
         AccessibilityServiceInfo info = getServiceInfo();
         if (info != null) {
             info.flags |= AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS
@@ -113,6 +114,7 @@ public class HomeKeyService extends AccessibilityService {
 
     @Override
     public boolean onUnbind(Intent intent) {
+        ServiceRepair.disconnected(this, getClass());
         handler.removeCallbacks(redirectHomeRunnable);
         instance = null;
         return super.onUnbind(intent);

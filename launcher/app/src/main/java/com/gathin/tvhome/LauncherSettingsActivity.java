@@ -22,9 +22,12 @@ import java.util.List;
 
 /** Remote-friendly settings owned by the launcher; system settings stay one row away. */
 public final class LauncherSettingsActivity extends Activity {
+    static final String EXTRA_REORDER = "com.gathin.tvhome.extra.REORDER_FROM_SETTINGS";
     private SharedPreferences choices;
     private final TextView[] columnChoices = new TextView[4];
     private final TextView[] rowChoices = new TextView[4];
+    private static final int[] DOCK_OPACITIES = {100, 70, 50, 30};
+    private final TextView[] dockChoices = new TextView[DOCK_OPACITIES.length];
     private TextView wallpaperChoice;
     private TextView ambientGlowChoice;
     private TextView animationsChoice;
@@ -33,6 +36,7 @@ public final class LauncherSettingsActivity extends Activity {
     private int columns;
     private int rowsBelowDock;
     private boolean ambientGlow;
+    private int dockOpacity;
     private boolean animations;
     private boolean advancedEffects;
 
@@ -42,9 +46,16 @@ public final class LauncherSettingsActivity extends Activity {
         setContentView(R.layout.activity_launcher_settings);
         choices = getSharedPreferences(Config.SETTINGS_NAME, MODE_PRIVATE);
         Config config = Config.load(this);
+        View reorderChoice = findViewById(R.id.reorderChoice);
+        reorderChoice.setVisibility(config.launcherSettingsButton ? View.VISIBLE : View.GONE);
+        reorderChoice.setOnClickListener(v -> {
+            setResult(RESULT_OK, new Intent().putExtra(EXTRA_REORDER, true));
+            finish();
+        });
         columns = config.columns;
         rowsBelowDock = config.rowsBelowDock;
         ambientGlow = config.ambientGlow;
+        dockOpacity = config.dockOpacity;
         animations = config.animations;
         advancedEffects = config.animations && config.advancedEffects;
 
@@ -56,7 +67,7 @@ public final class LauncherSettingsActivity extends Activity {
                 if (columns == value) return;
                 columns = value;
                 choices.edit().putInt("columns", value).apply();
-                setResult(RESULT_OK);
+                changed();
                 refresh();
             });
         }
@@ -68,7 +79,19 @@ public final class LauncherSettingsActivity extends Activity {
                 if (rowsBelowDock == value) return;
                 rowsBelowDock = value;
                 choices.edit().putInt(Config.ROWS_BELOW_DOCK_KEY, value).apply();
-                setResult(RESULT_OK);
+                changed();
+                refresh();
+            });
+        }
+        int[] dockIds = {R.id.dock100, R.id.dock70, R.id.dock50, R.id.dock30};
+        for (int i = 0; i < dockIds.length; i++) {
+            final int value = DOCK_OPACITIES[i];
+            dockChoices[i] = findViewById(dockIds[i]);
+            dockChoices[i].setOnClickListener(v -> {
+                if (dockOpacity == value) return;
+                dockOpacity = value;
+                choices.edit().putInt(Config.DOCK_OPACITY_KEY, value).apply();
+                changed();
                 refresh();
             });
         }
@@ -77,6 +100,7 @@ public final class LauncherSettingsActivity extends Activity {
         if (getResources().getBoolean(R.bool.rtl_app_grid)) {
             reverseRow(columnChoices);
             reverseRow(rowChoices);
+            reverseRow(dockChoices);
         }
         wallpaperChoice = findViewById(R.id.wallpaperChoice);
         wallpaperChoice.setOnClickListener(v -> showWallpaperPicker());
@@ -93,7 +117,7 @@ public final class LauncherSettingsActivity extends Activity {
             if (!animations) advancedEffects = false;
             choices.edit().putBoolean("animations", animations)
                     .putBoolean("advanced_effects", advancedEffects).apply();
-            setResult(RESULT_OK);
+            changed();
             refresh();
         });
         advancedChoice = findViewById(R.id.advancedChoice);
@@ -114,14 +138,16 @@ public final class LauncherSettingsActivity extends Activity {
             if (!hasOnTvChoices()) return;
             choices.edit().remove("columns").remove(Config.ROWS_BELOW_DOCK_KEY).remove("animations")
                     .remove("advanced_effects").remove(Config.WALLPAPER_CHOICE_KEY)
-                    .remove(Config.AMBIENT_GLOW_KEY).commit();
+                    .remove(Config.AMBIENT_GLOW_KEY)
+                    .remove(Config.DOCK_OPACITY_KEY).commit();
             Config current = Config.load(this);
             columns = current.columns;
             rowsBelowDock = current.rowsBelowDock;
             ambientGlow = current.ambientGlow;
+            dockOpacity = current.dockOpacity;
             animations = current.animations;
             advancedEffects = current.animations && current.advancedEffects;
-            setResult(RESULT_OK);
+            changed();
             refresh();
         });
         findViewById(R.id.defaultHomeChoice).setOnClickListener(v -> {
@@ -129,9 +155,10 @@ public final class LauncherSettingsActivity extends Activity {
             open(new Intent(Settings.ACTION_HOME_SETTINGS));
         });
         findViewById(R.id.tvSettingsChoice).setOnClickListener(v ->
-                open(new Intent(Settings.ACTION_SETTINGS)));
+                open(SystemSettings.intent(this, Settings.ACTION_SETTINGS)));
         refresh();
-        columnChoices[Math.max(0, Math.min(columns - 4, 3))].requestFocus();
+        if (config.launcherSettingsButton) reorderChoice.requestFocus();
+        else columnChoices[Math.max(0, Math.min(columns - 4, 3))].requestFocus();
     }
 
     private void reverseRow(TextView[] views) {
@@ -279,10 +306,20 @@ public final class LauncherSettingsActivity extends Activity {
         }).start();
     }
 
+    /**
+     * A choice was saved. Home rebuilds when it next resumes because the change count moved, whether these
+     * settings are left with Back or with the remote's Home button (which cancels the activity result).
+     */
+    private void changed() {
+        setResult(RESULT_OK);
+        choices.edit().putLong(Config.SETTINGS_REVISION_KEY,
+                choices.getLong(Config.SETTINGS_REVISION_KEY, 0) + 1).apply();
+    }
+
     private void setAdvanced(boolean enabled) {
         advancedEffects = enabled;
         choices.edit().putBoolean("advanced_effects", enabled).apply();
-        setResult(RESULT_OK);
+        changed();
         refresh();
     }
 
@@ -295,6 +332,9 @@ public final class LauncherSettingsActivity extends Activity {
         }
         ambientGlowChoice.setText(getString(R.string.ambient_glow_state,
                 getString(ambientGlow ? R.string.on : R.string.off)));
+        for (int i = 0; i < dockChoices.length; i++) {
+            dockChoices[i].setSelected(dockOpacity == DOCK_OPACITIES[i]);
+        }
         animationsChoice.setText(getString(R.string.animations_state,
                 getString(animations ? R.string.on : R.string.off)));
         advancedChoice.setText(getString(R.string.advanced_effects_state,
@@ -320,7 +360,8 @@ public final class LauncherSettingsActivity extends Activity {
         return choices.contains("columns") || choices.contains(Config.ROWS_BELOW_DOCK_KEY)
                 || choices.contains("animations") || choices.contains("advanced_effects")
                 || choices.contains(Config.WALLPAPER_CHOICE_KEY)
-                || choices.contains(Config.AMBIENT_GLOW_KEY);
+                || choices.contains(Config.AMBIENT_GLOW_KEY)
+                || choices.contains(Config.DOCK_OPACITY_KEY);
     }
 
     private void open(Intent intent) {

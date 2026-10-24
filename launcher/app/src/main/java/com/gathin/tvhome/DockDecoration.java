@@ -1,9 +1,11 @@
 package com.gathin.tvhome;
 
 import android.graphics.Canvas;
+import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.Shader;
 import android.view.View;
 
 import androidx.annotation.NonNull;
@@ -22,26 +24,54 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
 
     /** Extra band below the tiles for their names (always_show_names), in px. */
     private final float namesRoom;
+    /** Light glass like the top bar's pills (config.xml dock_glass): a white tint that fades downwards. */
+    private final boolean lightGlass;
+    /** Padding all round the tiles equal to the gap between them (config.xml dock_even_padding). */
+    private final boolean evenPadding;
+    /** The band's top and bottom the glass gradient was made for; it is remade when they move. */
+    private float shaderTop = Float.NaN, shaderBottom = Float.NaN;
 
-    /**
-     * @param translucent the cinematic shelf's band: the artwork and the glow show through it.
-     * @param names       the dock tiles show their names, so the band reaches down over them.
-     */
-    DockDecoration(int dockSize, float density, boolean translucent, boolean names,
-                   AppAdapter adapter, boolean advancedEffects) {
+    DockDecoration(int dockSize, float density, boolean translucent, boolean names, int opacity, boolean lightGlass,
+                   boolean evenPadding, AppAdapter adapter, boolean advancedEffects) {
         this.dockSize = dockSize;
         this.density = density;
         this.namesRoom = names ? 22 * density : 0;
+        this.lightGlass = lightGlass;
+        this.evenPadding = evenPadding;
         this.adapter = adapter;
         this.advancedEffects = advancedEffects;
-        band.setColor(translucent ? 0x8C121014 : 0xFF141416);
+        band.setColor(translucent ? 0x8C121014 : (Math.round(opacity * 2.55f) << 24) | 0x141416);
         edge.setStyle(Paint.Style.STROKE);
         edge.setStrokeWidth(density);
-        edge.setColor(translucent ? 0x26FFFFFF : 0x1FFFFFFF);
+        edge.setColor(lightGlass ? 0x38FFFFFF : translucent ? 0x26FFFFFF : 0x1FFFFFFF);
+    }
+
+    DockDecoration(int dockSize, float density, boolean translucent, boolean names, int opacity, boolean lightGlass,
+                   boolean evenPadding) {
+        this(dockSize, density, translucent, names, opacity, lightGlass, evenPadding, null, false);
+    }
+
+    DockDecoration(int dockSize, float density, boolean translucent, boolean names,
+                   AppAdapter adapter, boolean advancedEffects) {
+        this(dockSize, density, translucent, names, 100, false, false, adapter, advancedEffects);
     }
 
     DockDecoration(int dockSize, float density, boolean translucent, boolean names) {
-        this(dockSize, density, translucent, names, null, false);
+        this(dockSize, density, translucent, names, 100, false, false, null, false);
+    }
+
+    /** Concentric corners: the band's radius is the tiles' radius plus the band's padding around them. */
+    static float radiusPx(float tileRadiusPx, float paddingPx) {
+        return tileRadiusPx + paddingPx;
+    }
+
+    /**
+     * The band's padding on every side for dock_even_padding: the gap between two dock tiles (a cell minus its tile, as
+     * AppAdapter.tileWidthPx lays them out), capped by the room the grid leaves at its edges.
+     */
+    static float evenPaddingPx(int innerWidthPx, int columns, int tileWidthPx, float roomPx) {
+        float gap = columns > 0 ? innerWidthPx / (float) columns - tileWidthPx : 0f;
+        return Math.max(0f, Math.min(gap, roomPx));
     }
 
     @Override
@@ -78,23 +108,40 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
                 rect.union(l, t, r, b);
             }
         }
-        if (!any || cardW <= 0) return;
-
-        float scale = adapter != null ? adapter.focusScale() : (advancedEffects ? 1.12f : 1.10f);
-        // Expansion of a focused card beyond its layout bounds
-        float deltaX = cardW * (scale - 1f) / 2f;
-        float deltaY = cardH * (scale - 1f) / 2f;
-        float upwardShift = (advancedEffects && scale > 1f) ? 4f * density : 0f;
-
-        float pad = 14f * density;
-        float radius = 26f * density;
-
-        // Symmetrically expand the dock band geometry so the scaled/translated cards are reliably contained
-        rect.left = (rect.left - deltaX) - pad;
-        rect.right = (rect.right + deltaX) + pad;
-        rect.top = (rect.top - deltaY - upwardShift) - pad;
-        rect.bottom = (rect.bottom + deltaY) + pad + namesRoom;
-
+        if (!any) return;
+        float cardWidth = cardW;
+        float radius = AppAdapter.cornerRadius((int) cardWidth, density);
+        if (evenPadding) {
+            int inner = parent.getWidth() - parent.getPaddingLeft() - parent.getPaddingRight();
+            float room = Math.min(rect.top, Math.min(rect.left, parent.getWidth() - rect.right)) - density;
+            float even = evenPaddingPx(inner, dockSize, (int) cardWidth, room);
+            rect.inset(-even, -even);
+            radius = radiusPx(radius, even);
+        } else if (cardW > 0 && adapter != null) {
+            float scale = adapter.focusScale();
+            float deltaX = cardW * (scale - 1f) / 2f;
+            float deltaY = cardH * (scale - 1f) / 2f;
+            float upwardShift = (advancedEffects && scale > 1f) ? 4f * density : 0f;
+            float pad = 14f * density;
+            radius = 26f * density;
+            rect.left = (rect.left - deltaX) - pad;
+            rect.right = (rect.right + deltaX) + pad;
+            rect.top = (rect.top - deltaY - upwardShift) - pad;
+            rect.bottom = (rect.bottom + deltaY) + pad;
+        } else {
+            float pad = 14 * density;
+            float sidePad = 22 * density;
+            float side = Math.max(0f, Math.min(sidePad, Math.min(rect.left, parent.getWidth() - rect.right) - density));
+            rect.inset(-side, -pad);
+            radius = 26 * density;
+        }
+        rect.bottom += namesRoom;
+        if (lightGlass && (rect.top != shaderTop || rect.bottom != shaderBottom)) {
+            band.setShader(new LinearGradient(0, rect.top, 0, rect.bottom, 0x24FFFFFF, 0x0DFFFFFF,
+                    Shader.TileMode.CLAMP));
+            shaderTop = rect.top;
+            shaderBottom = rect.bottom;
+        }
         c.drawRoundRect(rect, radius, radius, band);
         c.drawRoundRect(rect, radius, radius, edge);
     }
