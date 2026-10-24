@@ -160,14 +160,6 @@
             android:noHistory="true"
             android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
 
-        <!-- Pure black audio-only window, dismisses on any key press -->
-        <activity
-            android:name=".BlackoutActivity"
-            android:exported="false"
-            android:excludeFromRecents="true"
-            android:noHistory="true"
-            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
-
         <!-- Screensaver: pick it in Settings, or `settings put secure screensaver_components
              com.gathin.tvhome/.ClockDream` over adb. -->
         <service

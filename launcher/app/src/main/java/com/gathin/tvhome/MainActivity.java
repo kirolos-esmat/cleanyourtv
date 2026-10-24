@@ -811,7 +811,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (intent == null || !ACTION_SHUFFLE_WALLPAPER.equals(intent.getAction())) return false;
         setIntent(new Intent(Intent.ACTION_MAIN));
         if (wallpaperPlayer != null) {
-            Toast.makeText(this, "Shuffling wallpaper...", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, R.string.cc_shuffling_toast, Toast.LENGTH_SHORT).show();
             wallpaperPlayer.shuffle();
         }
         return true;

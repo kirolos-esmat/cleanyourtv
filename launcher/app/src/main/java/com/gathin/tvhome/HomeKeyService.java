@@ -169,7 +169,9 @@ public class HomeKeyService extends AccessibilityService {
     public boolean onUnbind(Intent intent) {
         stopWaitingForUnlock();
         ServiceRepair.disconnected(this, getClass());
-        handler.removeCallbacks(redirectHomeRunnable);
+        handler.removeCallbacksAndMessages(null);
+        pendingDoubleTapKey = 0;
+        pendingSingleTapRunnable = null;
         instance = null;
         return super.onUnbind(intent);
     }
@@ -496,7 +498,8 @@ public class HomeKeyService extends AccessibilityService {
         queue.add(AccessibilityNodeInfo.obtain(node));
 
         Rect r = new Rect();
-        while (!queue.isEmpty()) {
+        int visited = 0;
+        while (!queue.isEmpty() && visited++ < 250) {
             AccessibilityNodeInfo current = queue.remove(0);
             if (current.isFocusable()) {
                 current.getBoundsInScreen(r);
@@ -517,6 +520,9 @@ public class HomeKeyService extends AccessibilityService {
                 }
             }
             current.recycle();
+        }
+        for (AccessibilityNodeInfo remaining : queue) {
+            remaining.recycle();
         }
         return best;
     }

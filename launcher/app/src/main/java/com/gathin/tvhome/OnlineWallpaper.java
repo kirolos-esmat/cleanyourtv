@@ -257,7 +257,10 @@ final class OnlineWallpaper {
                 try (InputStream in = conn.getInputStream();
                      BufferedReader reader = new BufferedReader(new InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8))) {
                     String line;
-                    while ((line = reader.readLine()) != null) sb.append(line);
+                    while ((line = reader.readLine()) != null) {
+                        sb.append(line);
+                        if (sb.length() > 256 * 1024) break;
+                    }
                 }
                 JSONObject json = new JSONObject(sb.toString());
                 JSONArray images = json.getJSONArray("images");
@@ -399,9 +402,10 @@ final class OnlineWallpaper {
         if (downloadUrl == null || downloadUrl.isEmpty()) return target.exists() ? target : null;
 
         File tempFile = new File(ctx.getCacheDir(), "online_wallpaper.tmp");
+        HttpURLConnection conn = null;
         try {
             URL url = new URL(downloadUrl);
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn = (HttpURLConnection) url.openConnection();
             conn.setRequestProperty("User-Agent", "tvhome/2.5 (Android TV wallpaper)");
             conn.setConnectTimeout(10000);
             conn.setReadTimeout(15000);
@@ -413,9 +417,12 @@ final class OnlineWallpaper {
                     return target.exists() ? target : null;
                 }
                 String contentType = conn.getContentType();
-                if (contentType != null && !contentType.startsWith("image/") && !contentType.startsWith("application/octet-stream")) {
-                    Log.w("TvHome.OnlineWallpaper", "Unexpected content type: " + contentType);
-                    return target.exists() ? target : null;
+                if (contentType != null) {
+                    String lowerType = contentType.toLowerCase(java.util.Locale.ROOT);
+                    if (!lowerType.startsWith("image/") && !lowerType.startsWith("application/octet-stream")) {
+                        Log.w("TvHome.OnlineWallpaper", "Unexpected content type: " + contentType);
+                        return target.exists() ? target : null;
+                    }
                 }
                 long totalRead = 0;
                 try (InputStream in = conn.getInputStream(); FileOutputStream out = new FileOutputStream(tempFile)) {
@@ -425,7 +432,6 @@ final class OnlineWallpaper {
                         totalRead += len;
                         if (totalRead > MAX_WALLPAPER_BYTES) {
                             Log.w("TvHome.OnlineWallpaper", "Exceeded max bytes during download");
-                            tempFile.delete();
                             return target.exists() ? target : null;
                         }
                         out.write(buffer, 0, len);
@@ -450,6 +456,7 @@ final class OnlineWallpaper {
         } catch (Exception e) {
             Log.w("TvHome.OnlineWallpaper", "Download failed: " + e.getMessage());
         } finally {
+            if (conn != null) conn.disconnect();
             if (tempFile.exists()) tempFile.delete();
         }
         return target.exists() ? target : null;

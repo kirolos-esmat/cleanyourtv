@@ -46,8 +46,6 @@ final class WallpaperPlayer {
     private final String onlineChoice;
     /** wallpaper_dim as an ARGB black, painted into each picture once instead of a full-screen shade view. */
     private final int dimColor;
-    /** The picture on screen, released once the next one has been drawn. */
-    private Bitmap current;
     private boolean active;
     private boolean closed;
     private boolean loading;
@@ -107,6 +105,7 @@ final class WallpaperPlayer {
                 Bitmap bitmap = decode(cached);
                 if (bitmap != null) {
                     image.setImageBitmap(bitmap);
+                    root.setBackground(null);
                     displayed = onlineChoice;
                     if (preferences.getLong("changed", 0) == 0) {
                         preferences.edit().putLong("changed", System.currentTimeMillis()).apply();
@@ -124,7 +123,7 @@ final class WallpaperPlayer {
         while (first != null) {
             Bitmap bitmap = decode(first);
             if (bitmap != null) {
-                show(bitmap);
+                image.setImageBitmap(bitmap);
                 // The picture covers the whole screen: the root's plain colour under it is overdraw.
                 root.setBackground(null);
                 displayed = first.getName();
@@ -166,6 +165,7 @@ final class WallpaperPlayer {
 
     private void applyBitmapWithCrossfade(Bitmap bmp) {
         if (bmp == null) return;
+        root.setBackground(null);
         if (image.getDrawable() == null) {
             image.setImageBitmap(bmp);
             return;
@@ -429,14 +429,6 @@ final class WallpaperPlayer {
         StringBuilder key = new StringBuilder();
         for (File file : images) key.append(file.getName()).append(':').append(file.length()).append(';');
         return key.toString();
-    }
-
-    /** Puts a picture on screen and releases the previous one after a frame has drawn the new one. */
-    private void show(Bitmap bitmap) {
-        Bitmap old = current;
-        current = bitmap;
-        image.setImageBitmap(bitmap);
-        if (old != null && old != bitmap) image.postDelayed(old::recycle, 500);
     }
 
     private Bitmap decode(File file) {

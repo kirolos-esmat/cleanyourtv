@@ -26,9 +26,8 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Current weather for the home header (config.xml show_weather).
- * Place is auto-detected from Android's location service (Wi-Fi/network provider), falling back to public IP
- * (ipwho.is / ipapi.co) once a day; weather comes from Open-Meteo every 30 minutes.
- * Can also be set manually in config.xml or config.json.
+ * Place is resolved from config coordinates or Android's on-device location service (Wi-Fi/network provider);
+ * weather comes from Open-Meteo every 30 minutes.
  * Text is cached in SharedPreferences so Home displays the last reading immediately.
  */
 final class Weather {
@@ -187,10 +186,10 @@ final class Weather {
             }
 
             if (loc == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                CountDownLatch done = new CountDownLatch(1);
                 Location[] got = new Location[1];
                 for (String provider : new String[]{"fused", LocationManager.NETWORK_PROVIDER}) {
                     try {
+                        CountDownLatch done = new CountDownLatch(1);
                         lm.getCurrentLocation(provider, null, IO_CALLBACKS, l -> {
                             if (l != null) got[0] = l;
                             done.countDown();
@@ -237,17 +236,6 @@ final class Weather {
                     }
                 }
             } catch (Exception ignored) {
-            }
-
-            if (city.isEmpty()) {
-                try {
-                    String geoUrl = String.format(Locale.US,
-                            "https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=%.4f&longitude=%.4f&localityLanguage=en",
-                            lat, lon);
-                    JSONObject json = new JSONObject(get(geoUrl));
-                    city = json.optString("city", json.optString("locality", ""));
-                } catch (Exception ignored) {
-                }
             }
 
             p.edit()

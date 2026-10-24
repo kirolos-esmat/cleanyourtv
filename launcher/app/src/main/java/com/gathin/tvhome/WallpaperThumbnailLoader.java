@@ -96,7 +96,7 @@ final class WallpaperThumbnailLoader {
             }
         }
 
-        String filename = "thumb_" + Math.abs(urlString.hashCode()) + ".jpg";
+        String filename = "thumb_" + Integer.toHexString(urlString.hashCode()) + ".jpg";
         File diskFile = new File(cacheDir, filename);
 
         if (diskFile.exists() && diskFile.length() > 0) {
@@ -104,9 +104,10 @@ final class WallpaperThumbnailLoader {
         }
 
         File tempFile = new File(cacheDir, filename + ".tmp");
+        HttpURLConnection conn = null;
         try {
             URL url = new URL(urlString);
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn = (HttpURLConnection) url.openConnection();
             conn.setRequestProperty("User-Agent", "tvhome/2.5 (Android TV)");
             conn.setConnectTimeout(8000);
             conn.setReadTimeout(8000);
@@ -114,8 +115,11 @@ final class WallpaperThumbnailLoader {
                 long lenHeader = conn.getContentLengthLong();
                 if (lenHeader > MAX_THUMB_BYTES) return null;
                 String type = conn.getContentType();
-                if (type != null && !type.startsWith("image/") && !type.startsWith("application/octet-stream")) {
-                    return null;
+                if (type != null) {
+                    String lowerType = type.toLowerCase(java.util.Locale.ROOT);
+                    if (!lowerType.startsWith("image/") && !lowerType.startsWith("application/octet-stream")) {
+                        return null;
+                    }
                 }
                 long total = 0;
                 try (InputStream in = conn.getInputStream(); FileOutputStream out = new FileOutputStream(tempFile)) {
@@ -124,7 +128,6 @@ final class WallpaperThumbnailLoader {
                     while ((len = in.read(buf)) != -1) {
                         total += len;
                         if (total > MAX_THUMB_BYTES) {
-                            tempFile.delete();
                             return null;
                         }
                         out.write(buf, 0, len);
@@ -137,6 +140,7 @@ final class WallpaperThumbnailLoader {
             }
         } catch (Exception ignored) {
         } finally {
+            if (conn != null) conn.disconnect();
             if (tempFile.exists()) tempFile.delete();
         }
         return null;

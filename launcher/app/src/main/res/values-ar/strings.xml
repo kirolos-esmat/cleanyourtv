@@ -94,6 +94,7 @@
         <item quantity="other">%1$d تطبيق</item>
     </plurals>
     <string name="greeting_with_name">%1$s، %2$s</string>
+    <string name="moving_hint">نقل %1$s \u00B7 اضغط على موافق عند الانتهاء</string>
     <string name="wallpaper_rotation_label">التبديل التلقائي: %1$s</string>
     <string name="wallpaper_rotation_prefix">التبديل التلقائي:</string>
     <string name="rotation_off">متوقف</string>
