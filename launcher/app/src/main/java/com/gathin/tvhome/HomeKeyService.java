@@ -110,6 +110,7 @@ public class HomeKeyService extends AccessibilityService {
         appKeys = RemoteKeys.parseAppKeys(config.appKeys);
         appDoubleKeys = RemoteKeys.parseDoubleTapAppKeys(config.appKeys);
         appScancodes = RemoteKeys.parseAppScancodes(config.appKeys);
+        RemoteKeys.applyKeyFilter(this, config.keyFilter);
     }
 
     @Override
@@ -250,7 +251,8 @@ public class HomeKeyService extends AccessibilityService {
             return true;
         }
 
-        // Apps button (KEYCODE_ALL_APPS):
+        // Apps button (KEYCODE_ALL_APPS); pass-through for other keys:
+        // if (event.getKeyCode() != KeyEvent.KEYCODE_ALL_APPS) return false;
         if (code == KeyEvent.KEYCODE_ALL_APPS) {
             if (event.getAction() == KeyEvent.ACTION_DOWN) {
                 if (event.getRepeatCount() == 0) {
