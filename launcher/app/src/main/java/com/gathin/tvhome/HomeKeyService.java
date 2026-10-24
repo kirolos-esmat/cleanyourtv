@@ -2,10 +2,14 @@ package com.gathin.tvhome;
 
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.graphics.Rect;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.UserManager;
 import android.provider.Settings;
 import android.view.KeyEvent;
 import android.view.View;
@@ -89,12 +93,12 @@ public class HomeKeyService extends AccessibilityService {
     };
 
     private int lastHandledNavKey = 0;
+    private BroadcastReceiver unlockReceiver;
 
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
         instance = this;
-        ServiceRepair.connected(this, getClass());
         AccessibilityServiceInfo info = getServiceInfo();
         if (info != null) {
             info.flags |= AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS
@@ -104,6 +108,38 @@ public class HomeKeyService extends AccessibilityService {
             setServiceInfo(info);
         }
         settingsScancodes = getResources().getIntArray(R.array.settings_key_scancodes);
+
+        UserManager users = getSystemService(UserManager.class);
+        if (users != null && !users.isUserUnlocked()) {
+            unlockReceiver = new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    stopWaitingForUnlock();
+                    loadConfig();
+                }
+            };
+            registerReceiver(unlockReceiver, new IntentFilter(Intent.ACTION_USER_UNLOCKED));
+            if (users.isUserUnlocked()) {
+                stopWaitingForUnlock();
+                loadConfig();
+            }
+            return;
+        }
+        loadConfig();
+    }
+
+    private void stopWaitingForUnlock() {
+        if (unlockReceiver != null) {
+            try {
+                unregisterReceiver(unlockReceiver);
+            } catch (Exception ignored) {
+            }
+            unlockReceiver = null;
+        }
+    }
+
+    private void loadConfig() {
+        ServiceRepair.connected(this, getClass());
         Config config = Config.load(this);
         settingsKeycodes = config.settingsKeycodes;
         settingsPanel = config.settingsKeyPanel;
@@ -111,14 +147,37 @@ public class HomeKeyService extends AccessibilityService {
         appDoubleKeys = RemoteKeys.parseDoubleTapAppKeys(config.appKeys);
         appScancodes = RemoteKeys.parseAppScancodes(config.appKeys);
         RemoteKeys.applyKeyFilter(this, config.keyFilter);
+
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root != null) {
+            try {
+                CharSequence rootPkg = root.getPackageName();
+                if (rootPkg != null) {
+                    foregroundPackage = rootPkg.toString();
+                }
+            } finally {
+                root.recycle();
+            }
+        }
+        if ("com.google.android.apps.tv.launcherx".equals(foregroundPackage)) {
+            handler.removeCallbacks(redirectHomeRunnable);
+            handler.postDelayed(redirectHomeRunnable, 350L);
+        }
     }
 
     @Override
     public boolean onUnbind(Intent intent) {
+        stopWaitingForUnlock();
         ServiceRepair.disconnected(this, getClass());
         handler.removeCallbacks(redirectHomeRunnable);
         instance = null;
         return super.onUnbind(intent);
+    }
+
+    @Override
+    public void onDestroy() {
+        stopWaitingForUnlock();
+        super.onDestroy();
     }
 
     public static boolean standby() {
@@ -471,13 +530,13 @@ public class HomeKeyService extends AccessibilityService {
             foregroundPackage = pkg.toString();
         }
 
-        if (pkg != null && cls != null && "com.google.android.apps.tv.launcherx".contentEquals(pkg)) {
-            String className = cls.toString();
+        if (pkg != null && "com.google.android.apps.tv.launcherx".contentEquals(pkg)) {
+            String className = cls != null ? cls.toString() : "";
             if (isAllowedLauncherxActivity(className)) {
                 handler.removeCallbacks(redirectHomeRunnable);
-            } else if (className.contains("HomeActivity")) {
+            } else {
                 handler.removeCallbacks(redirectHomeRunnable);
-                handler.postDelayed(redirectHomeRunnable, 400L);
+                handler.postDelayed(redirectHomeRunnable, 350L);
             }
         }
     }

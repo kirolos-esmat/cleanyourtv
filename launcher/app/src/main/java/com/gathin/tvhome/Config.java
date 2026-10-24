@@ -444,26 +444,40 @@ final class Config {
         }
         // A theme push or reset invalidates choices made on the TV. On first use, remember the
         // current theme without clearing choices from an older launcher version.
-        SharedPreferences choices = ctx.getSharedPreferences(SETTINGS_NAME, Context.MODE_PRIVATE);
+        SharedPreferences choices = null;
+        try {
+            choices = ctx.getSharedPreferences(SETTINGS_NAME, Context.MODE_PRIVATE);
+        } catch (IllegalStateException e) {
+            try {
+                Context deCtx = ctx.createDeviceProtectedStorageContext();
+                choices = deCtx != null ? deCtx.getSharedPreferences(SETTINGS_NAME, Context.MODE_PRIVATE) : null;
+            } catch (Exception ignored) {
+            }
+        }
         // Unmounted storage looks like a theme reset; compare only once the file is readable.
-        if (mounted) syncThemeChoices(choices, dir, file);
-        int chosenColumns = choices.getInt("columns", columns);
-        if (chosenColumns >= 4 && chosenColumns <= 7) columns = chosenColumns;
-        int chosenRows = choices.getInt(ROWS_BELOW_DOCK_KEY, rowsBelow);
-        if (chosenRows >= 0 && chosenRows <= 3) rowsBelow = chosenRows;
-        animations = choices.getBoolean("animations", animations);
-        advancedEffects = choices.getBoolean("advanced_effects", advancedEffects);
-        ambientGlow = choices.getBoolean(AMBIENT_GLOW_KEY, ambientGlow);
+        if (choices != null) {
+            if (mounted) syncThemeChoices(choices, dir, file);
+            int chosenColumns = choices.getInt("columns", columns);
+            if (chosenColumns >= 4 && chosenColumns <= 7) columns = chosenColumns;
+            int chosenRows = choices.getInt(ROWS_BELOW_DOCK_KEY, rowsBelow);
+            if (chosenRows >= 0 && chosenRows <= 3) rowsBelow = chosenRows;
+            animations = choices.getBoolean("animations", animations);
+            advancedEffects = choices.getBoolean("advanced_effects", advancedEffects);
+            ambientGlow = choices.getBoolean(AMBIENT_GLOW_KEY, ambientGlow);
+        }
         File wallpaper = dir != null ? new File(dir, WALLPAPER_NAME) : null;
         if (wallpaper != null && !(wallpaper.isFile() && wallpaper.length() > 0)) wallpaper = null;
         // A theme can also switch the wallpaper off while the file is still there.
         boolean wallpaperEnabled = json == null || bool(json, "wallpaper", true);
         if (!wallpaperEnabled) wallpaper = null;
-        int rotationMinutes = choices.getInt("wallpaper_rotation_minutes",
-                json == null ? 0 : integer(json, "wallpaper_rotation_minutes", 0, 0, 1440));
+        int rotationMinutes = choices != null ? choices.getInt("wallpaper_rotation_minutes",
+                json == null ? 0 : integer(json, "wallpaper_rotation_minutes", 0, 0, 1440))
+                : (json == null ? 0 : integer(json, "wallpaper_rotation_minutes", 0, 0, 1440));
         int wallpaperDim = json == null ? 0 : integer(json, "wallpaper_dim", 0, 0, 90);
         int dockOpacity = json == null ? 100 : integer(json, "dock_opacity", 100, 30, 100);
-        dockOpacity = chosenDockOpacity(choices.getInt(DOCK_OPACITY_KEY, -1), dockOpacity);
+        if (choices != null) {
+            dockOpacity = chosenDockOpacity(choices.getInt(DOCK_OPACITY_KEY, -1), dockOpacity);
+        }
         String wallpaperOrder = json == null ? WallpaperRotation.ORDER_SHUFFLE
                 : string(json, "wallpaper_order", WallpaperRotation.ORDER_SHUFFLE);
         // An unknown order must not silently change how an existing collection rotates.
@@ -475,7 +489,7 @@ final class Config {
         if (wallpapers.isEmpty() && wallpaper != null) wallpapers.add(wallpaper);
         // An on-TV wallpaper pick overrides the theme: a filename from the wallpapers/
         // collection, or "none". Unset means the theme decides (off by default).
-        String wallpaperChoice = choices.getString(WALLPAPER_CHOICE_KEY, null);
+        String wallpaperChoice = choices != null ? choices.getString(WALLPAPER_CHOICE_KEY, null) : null;
         List<File> chosen = WallpaperRotation.chosen(dir == null ? Collections.emptyList()
                 : WallpaperRotation.images(new File(dir, "wallpapers")), wallpaper, wallpaperChoice);
         if (OnlineWallpaper.isOnlineChoice(wallpaperChoice)) {
