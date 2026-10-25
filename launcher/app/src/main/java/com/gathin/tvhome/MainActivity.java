@@ -373,6 +373,17 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             updateClockVisibility();
         }
     };
+    private static final long TASK_MANAGER_TICK_MS = 3000L;
+    private final Runnable taskManagerTick = new Runnable() {
+        @Override
+        public void run() {
+            if (!isDestroyed() && !isFinishing()) {
+                updateTaskManagerPill();
+                handler.postDelayed(this, TASK_MANAGER_TICK_MS);
+            }
+        }
+    };
+
     private final Runnable minuteTick = new Runnable() {
         @Override
         public void run() {
@@ -1039,6 +1050,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         resetScreensaverTimer();
         handler.removeCallbacks(minuteTick);
         handler.postDelayed(minuteTick, MINUTE_MS);
+        handler.removeCallbacks(taskManagerTick);
+        handler.post(taskManagerTick);
         if (festive && diya != null) {
             diya.start();
             LocalDate today = LocalDate.now();
@@ -1214,6 +1227,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         heroArt.animate().cancel();
         handler.removeCallbacks(minuteTick);
         handler.removeCallbacks(screensaverRunnable);
+        handler.removeCallbacks(taskManagerTick);
         stopStats();
         if (diya != null) diya.stop();
         cancelPendingFocusScroll();
@@ -1270,6 +1284,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        handler.removeCallbacks(taskManagerTick);
         unregisterReceiver(packageReceiver);
         wallpaperPlayer.close();
         ConnectivityManager cm = getSystemService(ConnectivityManager.class);
@@ -3416,11 +3431,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         View anchor = btnControlCenter != null && btnControlCenter.getVisibility() == View.VISIBLE
                 ? btnControlCenter : findViewById(R.id.btnSettings);
         View panel = getLayoutInflater().inflate(R.layout.popup_task_manager, root, false);
-        LinearLayout taskList = panel.findViewById(R.id.taskList);
-        View btnCloseAll = panel.findViewById(R.id.btnCloseAll);
-        TextView emptyText = panel.findViewById(R.id.emptyText);
+        LinearLayout rows = panel.findViewById(R.id.rows);
 
-        int initialWidth = (int) (300 * density);
+        int initialWidth = (int) (260 * density);
         final PopupWindow popup = glassPopup(panel, initialWidth);
         openPopup = popup;
         popup.setOnDismissListener(() -> {
@@ -3430,45 +3443,76 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         List<TaskManager.AppEntry> apps = TaskManager.getRecentApps(this);
 
         if (apps.isEmpty()) {
-            btnCloseAll.setVisibility(View.GONE);
-            emptyText.setVisibility(View.VISIBLE);
+            View emptyRow = getLayoutInflater().inflate(R.layout.item_input, rows, false);
+            ImageView icon = emptyRow.findViewById(R.id.icon);
+            icon.setImageResource(R.drawable.ic_chip);
+            icon.setVisibility(View.VISIBLE);
+            emptyRow.findViewById(R.id.dot).setVisibility(View.GONE);
+            ((TextView) emptyRow.findViewById(R.id.title)).setText(R.string.no_running_apps);
+            TextView status = emptyRow.findViewById(R.id.status);
+            status.setText(R.string.task_all_clear);
+            status.setVisibility(View.VISIBLE);
+            emptyRow.setOnClickListener(v -> popup.dismiss());
+            rows.addView(emptyRow);
         } else {
-            emptyText.setVisibility(View.GONE);
-            btnCloseAll.setVisibility(View.VISIBLE);
-            btnCloseAll.setOnClickListener(v -> {
+            // 1. Close All row
+            View closeAllRow = getLayoutInflater().inflate(R.layout.item_input, rows, false);
+            ImageView closeIcon = closeAllRow.findViewById(R.id.icon);
+            closeIcon.setImageResource(R.drawable.ic_close);
+            closeIcon.setVisibility(View.VISIBLE);
+            closeAllRow.findViewById(R.id.dot).setVisibility(View.GONE);
+            ((TextView) closeAllRow.findViewById(R.id.title)).setText(R.string.close_all);
+            TextView closeStatus = closeAllRow.findViewById(R.id.status);
+            closeStatus.setText(R.string.close_all_sub);
+            closeStatus.setVisibility(View.VISIBLE);
+            closeAllRow.setOnClickListener(v -> {
                 TaskManager.closeAll(this, apps);
                 trimMemoryNow();
                 updateTaskManagerPill();
                 Toast.makeText(this, R.string.apps_closed_toast, Toast.LENGTH_SHORT).show();
                 popup.dismiss();
             });
+            rows.addView(closeAllRow);
 
+            // Subtle divider
+            View divider = new View(this);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, (int) (1 * density));
+            lp.setMargins((int) (8 * density), (int) (3 * density), (int) (8 * density), (int) (3 * density));
+            divider.setLayoutParams(lp);
+            divider.setBackgroundColor(0x14FFFFFF);
+            rows.addView(divider);
+
+            // 2. Individual app rows
             for (TaskManager.AppEntry app : apps) {
-                View row = getLayoutInflater().inflate(R.layout.item_task_manager, taskList, false);
-                ImageView appIcon = row.findViewById(R.id.appIcon);
-                TextView appTitle = row.findViewById(R.id.appTitle);
-
+                View row = getLayoutInflater().inflate(R.layout.item_input, rows, false);
+                ImageView icon = row.findViewById(R.id.icon);
                 if (app.icon != null) {
-                    appIcon.setImageDrawable(app.icon);
+                    icon.setImageDrawable(app.icon);
+                    icon.setImageTintList(null);
                 } else {
-                    appIcon.setImageResource(R.drawable.ic_apps);
+                    icon.setImageResource(R.drawable.ic_apps);
                 }
-                appTitle.setText(app.appName);
+                icon.setVisibility(View.VISIBLE);
+                row.findViewById(R.id.dot).setVisibility(View.GONE);
+                ((TextView) row.findViewById(R.id.title)).setText(app.appName);
+
+                TextView status = row.findViewById(R.id.status);
+                status.setText(R.string.task_end_action);
+                status.setVisibility(View.VISIBLE);
 
                 row.setOnClickListener(v -> {
                     TaskManager.closeApp(this, app.packageName);
                     trimMemoryNow();
                     updateTaskManagerPill();
                     Toast.makeText(this, getString(R.string.app_closed_toast, app.appName), Toast.LENGTH_SHORT).show();
-                    taskList.removeView(row);
-                    if (taskList.getChildCount() == 0) {
-                        btnCloseAll.setVisibility(View.GONE);
-                        emptyText.setVisibility(View.VISIBLE);
-                        panel.postDelayed(popup::dismiss, 800);
+                    rows.removeView(row);
+                    if (rows.getChildCount() <= 2) {
+                        popup.dismiss();
                     }
                 });
 
-                taskList.addView(row);
+                rows.addView(row);
             }
         }
 
@@ -3476,12 +3520,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         popup.setWidth(Math.max(initialWidth, panel.getMeasuredWidth()));
         dropIn(popup, panel, anchor, getResources().getBoolean(R.bool.rtl_menu_bar)
                 ? Gravity.START : Gravity.END);
-
-        if (!apps.isEmpty()) {
-            btnCloseAll.requestFocus();
-        } else {
-            panel.requestFocus();
-        }
+        rows.getChildAt(0).requestFocus();
     }
 
     private void showControlCenter() {

@@ -18,10 +18,10 @@
         android:layout_height="wrap_content"
         android:textColor="@drawable/pill_text_dim"
         android:duplicateParentState="true"
-        android:textSize="11sp"
+        android:textSize="12sp"
         android:textDirection="locale"
-        android:fontFamily="@string/font_body"
-        android:letterSpacing="0.04" />
+        android:fontFamily="@string/font_medium"
+        android:letterSpacing="0.02" />
 
     <View
         android:id="@+id/dot"
