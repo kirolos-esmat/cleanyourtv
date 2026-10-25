@@ -77,17 +77,50 @@ public class HomeKeyService extends AccessibilityService {
 
     private String foregroundPackage = "";
 
-    private static boolean isAllowedLauncherxActivity(String className) {
+    static boolean isAllowedLauncherxActivity(String className) {
         if (className == null) return false;
         return className.contains("Dashboard")
                 || className.contains("Profile")
                 || className.contains("Account")
                 || className.contains("Reauth")
-                || className.contains("Lock");
+                || className.contains("Lock")
+                || className.contains("SleepTimer")
+                || className.contains("GoogleHome")
+                || className.contains("Dialog");
+    }
+
+    static boolean isStockHomeActivity(String className) {
+        if (className == null) return false;
+        return className.contains("HomeActivity")
+                || className.contains("VanillaModeHomeActivity");
+    }
+
+    private boolean isDashboardActive() {
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null) return false;
+        try {
+            Rect bounds = new Rect();
+            root.getBoundsInScreen(bounds);
+            int screenWidth = getResources().getDisplayMetrics().widthPixels;
+            if (bounds.left > 100 || (bounds.width() > 0 && bounds.width() < screenWidth * 0.85f)) {
+                return true;
+            }
+            CharSequence cls = root.getClassName();
+            if (cls != null && isAllowedLauncherxActivity(cls.toString())) {
+                return true;
+            }
+        } catch (Exception ignored) {
+        } finally {
+            root.recycle();
+        }
+        return false;
     }
 
     private final Runnable redirectHomeRunnable = () -> {
         if ("com.google.android.apps.tv.launcherx".equals(foregroundPackage)) {
+            if (isDashboardActive()) {
+                return;
+            }
             openHome();
         }
     };
@@ -160,8 +193,10 @@ public class HomeKeyService extends AccessibilityService {
             }
         }
         if ("com.google.android.apps.tv.launcherx".equals(foregroundPackage)) {
-            handler.removeCallbacks(redirectHomeRunnable);
-            handler.postDelayed(redirectHomeRunnable, 350L);
+            if (!isDashboardActive()) {
+                handler.removeCallbacks(redirectHomeRunnable);
+                handler.postDelayed(redirectHomeRunnable, 350L);
+            }
         }
     }
 
@@ -538,9 +573,9 @@ public class HomeKeyService extends AccessibilityService {
 
         if (pkg != null && "com.google.android.apps.tv.launcherx".contentEquals(pkg)) {
             String className = cls != null ? cls.toString() : "";
-            if (isAllowedLauncherxActivity(className)) {
+            if (isAllowedLauncherxActivity(className) || isDashboardActive()) {
                 handler.removeCallbacks(redirectHomeRunnable);
-            } else {
+            } else if (isStockHomeActivity(className)) {
                 handler.removeCallbacks(redirectHomeRunnable);
                 handler.postDelayed(redirectHomeRunnable, 350L);
             }

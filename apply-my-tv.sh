@@ -15,9 +15,10 @@ TV_HOST="$TV_HOST" ./tools/disable.sh my-debloat.txt
 echo "Ensuring com.gathin.tvhome is default Home..."
 adb -s "$TV_HOST:5555" shell cmd package set-home-activity com.gathin.tvhome/.MainActivity || true
 
-echo "Ensuring Google Cast & Ambient MediaShell and Screensaver (dreamx) are enabled..."
+echo "Ensuring Google Cast & Ambient MediaShell, Screensaver (dreamx), and SetupWraith are enabled..."
 adb -s "$TV_HOST:5555" shell pm enable com.google.android.apps.mediashell || true
 adb -s "$TV_HOST:5555" shell pm enable com.google.android.apps.tv.dreamx || true
+adb -s "$TV_HOST:5555" shell pm enable com.google.android.tungsten.setupwraith || true
 adb -s "$TV_HOST:5555" shell am start-service -a com.google.cast.action.BIND -n com.google.android.apps.mediashell/.CastReceiverService || true
 
 ENABLE_WEATHER_LOCATION="${ENABLE_WEATHER_LOCATION:-1}"
@@ -26,24 +27,29 @@ if [ "$ENABLE_WEATHER_LOCATION" = "1" ]; then
     adb -s "$TV_HOST:5555" shell settings put secure location_mode 3 || true
 fi
 
-echo "Enforcing screensaver privacy while granting launcher location for weather..."
-adb -s "$TV_HOST:5555" shell pm revoke --user 0 com.google.android.apps.tv.dreamx android.permission.ACCESS_FINE_LOCATION 2>&1 || true
-adb -s "$TV_HOST:5555" shell pm revoke --user 0 com.google.android.apps.tv.dreamx android.permission.ACCESS_COARSE_LOCATION 2>&1 || true
-adb -s "$TV_HOST:5555" shell pm revoke --user 10 com.google.android.apps.tv.dreamx android.permission.ACCESS_FINE_LOCATION 2>&1 || true
-adb -s "$TV_HOST:5555" shell pm revoke --user 10 com.google.android.apps.tv.dreamx android.permission.ACCESS_COARSE_LOCATION 2>&1 || true
+echo "Granting location permissions for screensaver ambient weather and launcher clock/weather..."
+adb -s "$TV_HOST:5555" shell pm grant com.google.android.apps.tv.dreamx android.permission.ACCESS_COARSE_LOCATION 2>&1 || true
+adb -s "$TV_HOST:5555" shell pm grant com.google.android.apps.tv.dreamx android.permission.ACCESS_FINE_LOCATION 2>&1 || true
+adb -s "$TV_HOST:5555" shell pm grant --user 10 com.google.android.apps.tv.dreamx android.permission.ACCESS_COARSE_LOCATION 2>&1 || true
+adb -s "$TV_HOST:5555" shell pm grant --user 10 com.google.android.apps.tv.dreamx android.permission.ACCESS_FINE_LOCATION 2>&1 || true
 adb -s "$TV_HOST:5555" shell pm grant com.gathin.tvhome android.permission.ACCESS_FINE_LOCATION 2>&1 || true
 adb -s "$TV_HOST:5555" shell pm grant com.gathin.tvhome android.permission.ACCESS_COARSE_LOCATION 2>&1 || true
 
-echo "Enabling HomeKeyService accessibility service..."
-CURRENT_SERVICES=$(adb -s "$TV_HOST:5555" shell settings get secure enabled_accessibility_services 2>/dev/null | tr -d '\r\n')
-if [[ ":$CURRENT_SERVICES:" != *":com.gathin.tvhome/.HomeKeyService:"* ]]; then
-    NEW_SERVICES="${CURRENT_SERVICES:+$CURRENT_SERVICES:}com.gathin.tvhome/.HomeKeyService"
-    adb -s "$TV_HOST:5555" shell settings put secure enabled_accessibility_services "$NEW_SERVICES"
-fi
-adb -s "$TV_HOST:5555" shell settings put secure accessibility_enabled 1
+echo "Enabling HomeKeyService accessibility service and self-repair permissions..."
+adb -s "$TV_HOST:5555" shell pm grant com.gathin.tvhome android.permission.WRITE_SECURE_SETTINGS 2>/dev/null || true
+adb -s "$TV_HOST:5555" shell cmd appops set com.gathin.tvhome AUTO_START allow 2>/dev/null || true
+CURRENT_SERVICES=$(adb -s "$TV_HOST:5555" shell settings get secure enabled_accessibility_services 2>/dev/null | tr -d '\r\n' || true)
+OTHER_SERVICES=$(printf '%s' "$CURRENT_SERVICES" | tr ':' '\n' | grep -v -E '^($|null$|com\.gathin\.tvhome/(\.HomeKeyService|com\.gathin\.tvhome\.HomeKeyService)$)' | paste -sd ':' - || true)
+NEW_SERVICES="${OTHER_SERVICES:+$OTHER_SERVICES:}com.gathin.tvhome/.HomeKeyService"
+adb -s "$TV_HOST:5555" shell "settings put secure enabled_accessibility_services '' && settings put secure accessibility_enabled 0"
+sleep 1
+adb -s "$TV_HOST:5555" shell "settings put secure enabled_accessibility_services '$NEW_SERVICES' && settings put secure accessibility_enabled 1"
 
 echo "Configuring AdGuard ad-blocking Private DNS..."
 adb -s "$TV_HOST:5555" shell settings put global private_dns_specifier dns.adguard-dns.com
 adb -s "$TV_HOST:5555" shell settings put global private_dns_mode hostname
+
+echo "Bringing CleanYourTV Home to front..."
+adb -s "$TV_HOST:5555" shell am start -n com.gathin.tvhome/.MainActivity >/dev/null 2>&1 || true
 
 echo "Setup complete! TV state successfully synchronized."
