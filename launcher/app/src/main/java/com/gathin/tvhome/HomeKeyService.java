@@ -2,24 +2,34 @@ package com.gathin.tvhome;
 
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
+import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.graphics.Rect;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.PowerManager;
+import android.os.SystemClock;
 import android.os.UserManager;
 import android.provider.Settings;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Sends the remote's Home button to this launcher on remotes that emit KEYCODE_HOME or KEYCODE_ALL_APPS,
@@ -30,23 +40,57 @@ import java.util.Map;
  * - Home long press: opens Dashboard panel.
  * - Apps click: returns to launcher from other apps, does nothing while on launcher.
  * - Apps long press: opens Google Play Store directly.
+ *
+ * With stock_home_redirect set, it also sends the stock launcher's home screen back here, for firmware that turns
+ * that launcher on again after it was disabled (XGIMI's xrmservice does, on its own remote keys), or that cannot be
+ * disabled at all, and a short press of Home opens this launcher even when the stock home is already on screen.
+ *
+ * With power_on_home set, a Live TV window (live_tv_package) that the firmware opens by itself at power-on is sent
+ * back here too, until the first key press after boot or after the screen turns on (Changhong / Homwee boards).
+ *
+ * Enable over adb:
+ *   settings put secure enabled_accessibility_services com.gathin.tvhome/.HomeKeyService
+ *   settings put secure accessibility_enabled 1
  */
 public class HomeKeyService extends AccessibilityService {
 
     public static volatile HomeKeyService instance;
+    private static HomeKeyService running;
 
     private static final long DOUBLE_TAP_MS = 300L;
     private static final long LONG_PRESS_MS = 400L;
 
+    /** restore_key_services was on when the config was read: this helper is noted for ServiceRepair. */
+    private boolean repairRecord;
     /** Remote buttons that should open Settings (config.xml, settings_key_scancodes and settings_key_keycodes). */
     private int[] settingsScancodes = new int[0];
     private int[] settingsKeycodes = new int[0];
     private boolean settingsPanel;
+    /** consume_volume_keys: Volume Up/Down go to VolumeKeys instead of on to the firmware. */
+    private boolean consumeVolumeKeys;
     /** app_keys, single tap mapping (keycode -> package). */
     private Map<Integer, String> appKeys = Collections.emptyMap();
     /** app_keys, double tap mapping (keycode -> package). */
     private Map<Integer, String> appDoubleKeys = Collections.emptyMap();
     private Map<Integer, String> appScancodes = Collections.emptyMap();
+    private Map<Integer, String> holdAppKeys = Collections.emptyMap();
+    private Map<Integer, String> holdAppScancodes = Collections.emptyMap();
+
+    /** The stock launcher's HOME activities (stock_home_redirect), disabled ones included. */
+    private final Set<String> stockHome = new HashSet<>();
+    /** stock_home_redirect, the stock launcher's package. */
+    private String stockHomePackage = "";
+    /** power_on_home: the Live TV package to send back to Home, empty when off; armed until this uptime or a key. */
+    private String powerOnLiveTv = "";
+    private long powerOnUntil;
+    /** power_on_home: re-arms after the screen turns on; null unless the key is on. */
+    private BroadcastReceiver screenOnReceiver;
+    /** Stops key filtering while a game controller is connected; null unless gamepad_passthrough and key_filter, or before the unlock. */
+    private GamepadPassthrough gamepads;
+    /** Screen-off receiver while guard_off_in_standby is set; null otherwise. */
+    private BroadcastReceiver standbyExit;
+    /** disableSelf is how this service leaves for standby, not the user turning it off. */
+    private boolean steppingOut;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private int pendingDoubleTapKey;
@@ -76,6 +120,8 @@ public class HomeKeyService extends AccessibilityService {
     };
 
     private String foregroundPackage = "";
+    private int lastHandledNavKey = 0;
+    private BroadcastReceiver unlockReceiver;
 
     static boolean isAllowedLauncherxActivity(String className) {
         if (className == null) return false;
@@ -125,13 +171,11 @@ public class HomeKeyService extends AccessibilityService {
         }
     };
 
-    private int lastHandledNavKey = 0;
-    private BroadcastReceiver unlockReceiver;
-
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
         instance = this;
+        running = this;
         AccessibilityServiceInfo info = getServiceInfo();
         if (info != null) {
             info.flags |= AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS
@@ -171,15 +215,111 @@ public class HomeKeyService extends AccessibilityService {
         }
     }
 
+    /** The opt-in broadcast: arm this binding now, or drop the receiver if the opt-in was turned off. */
+    static void applyStandbyOptIn() {
+        HomeKeyService service = running;
+        if (service == null) return;
+        if (GuardKeep.offInStandby(service)) service.armStandbyExit();
+        else service.disarmStandbyExit();
+    }
+
+    @Override
+    public void onDestroy() {
+        if (running == this) running = null;
+        if (instance == this) instance = null;
+        stopWaitingForUnlock();
+        if (screenOnReceiver != null) unregisterReceiver(screenOnReceiver);
+        if (standbyExit != null) {
+            try {
+                unregisterReceiver(standbyExit);
+            } catch (RuntimeException ignored) {
+            }
+            standbyExit = null;
+        }
+        if (gamepads != null) gamepads.stop();
+        if (consumeVolumeKeys) VolumeKeys.stop();
+        super.onDestroy();
+    }
+
+    public static boolean standby() {
+        if (instance != null) {
+            return instance.performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN);
+        }
+        return false;
+    }
+
+    /** Some TCL boards never wake from the remote while this helper stays bound with the screen off. */
+    private void armStandbyExit() {
+        if (standbyExit != null || !GuardKeep.offInStandby(this)) return;
+        standbyExit = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (!Intent.ACTION_SCREEN_OFF.equals(intent.getAction())) return;
+                leaveForStandby();
+            }
+        };
+        registerReceiver(standbyExit, new IntentFilter(Intent.ACTION_SCREEN_OFF));
+        PowerManager power = getSystemService(PowerManager.class);
+        if (power != null && !power.isInteractive()) leaveForStandby();
+    }
+
+    private void disarmStandbyExit() {
+        if (standbyExit == null) return;
+        try {
+            unregisterReceiver(standbyExit);
+        } catch (RuntimeException ignored) {
+        }
+        standbyExit = null;
+    }
+
+    private void leaveForStandby() {
+        steppingOut = true;
+        GuardKeep.stepOut(this);
+    }
+
     private void loadConfig() {
-        ServiceRepair.connected(this, getClass());
         Config config = Config.load(this);
+        repairRecord = config.restoreKeyServices;
+        if (repairRecord) ServiceRepair.connected(this, getClass());
         settingsKeycodes = config.settingsKeycodes;
         settingsPanel = config.settingsKeyPanel;
+        consumeVolumeKeys = config.consumeVolumeKeys;
+        if (consumeVolumeKeys) VolumeKeys.stop();
         appKeys = RemoteKeys.parseAppKeys(config.appKeys);
         appDoubleKeys = RemoteKeys.parseDoubleTapAppKeys(config.appKeys);
         appScancodes = RemoteKeys.parseAppScancodes(config.appKeys);
+        holdAppKeys = RemoteKeys.parseHoldAppKeys(config.appKeys);
+        holdAppScancodes = RemoteKeys.parseHoldAppScancodes(config.appKeys);
         RemoteKeys.applyKeyFilter(this, config.keyFilter);
+
+        stockHome.clear();
+        stockHomePackage = config.stockHomeRedirect;
+        if (!config.stockHomeRedirect.isEmpty()) {
+            Intent home = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).setPackage(config.stockHomeRedirect);
+            for (ResolveInfo ri : getPackageManager().queryIntentActivities(home, PackageManager.MATCH_DISABLED_COMPONENTS)) {
+                stockHome.add(ri.activityInfo.name);
+            }
+        }
+
+        String openOnStart = config.openOnStartChoice
+                ? getSharedPreferences(Config.SETTINGS_NAME, MODE_PRIVATE).getString(OpenOnStart.KEY, "") : "";
+        powerOnLiveTv = config.powerOnHome && !config.bootToLiveTv && !config.liveTvPackage.equals(openOnStart)
+                ? config.liveTvPackage : "";
+        if (!powerOnLiveTv.isEmpty()) {
+            armPowerOnHome();
+        } else if (screenOnReceiver != null) {
+            unregisterReceiver(screenOnReceiver);
+            screenOnReceiver = null;
+            powerOnUntil = 0;
+        }
+
+        if (!stockHome.isEmpty() || !powerOnLiveTv.isEmpty()) probeAtBoot();
+        armStandbyExit();
+
+        if (config.gamepadPassthrough && config.keyFilter && gamepads == null) {
+            gamepads = new GamepadPassthrough(this);
+            gamepads.start();
+        }
 
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root != null) {
@@ -200,30 +340,6 @@ public class HomeKeyService extends AccessibilityService {
         }
     }
 
-    @Override
-    public boolean onUnbind(Intent intent) {
-        stopWaitingForUnlock();
-        ServiceRepair.disconnected(this, getClass());
-        handler.removeCallbacksAndMessages(null);
-        pendingDoubleTapKey = 0;
-        pendingSingleTapRunnable = null;
-        instance = null;
-        return super.onUnbind(intent);
-    }
-
-    @Override
-    public void onDestroy() {
-        stopWaitingForUnlock();
-        super.onDestroy();
-    }
-
-    public static boolean standby() {
-        if (instance != null) {
-            return instance.performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN);
-        }
-        return false;
-    }
-
     private boolean isSettingsKey(KeyEvent event) {
         if (event.getKeyCode() == KeyEvent.KEYCODE_SETTINGS) return true;
         for (int code : settingsScancodes) if (event.getScanCode() == code) return true;
@@ -232,14 +348,20 @@ public class HomeKeyService extends AccessibilityService {
     }
 
     private void openHome() {
-        Intent home = new Intent(this, MainActivity.class)
-                .setAction(Intent.ACTION_MAIN)
-                .addCategory(Intent.CATEGORY_HOME)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+        Intent open = stockHomeStays() ? new Intent(this, MainActivity.class)
+                : new Intent(Intent.ACTION_MAIN).setPackage(getPackageName());
         try {
-            startActivity(home);
+            startActivity(open.addCategory(Intent.CATEGORY_HOME)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED));
         } catch (Exception ignored) {
         }
+    }
+
+    private boolean stockHomeStays() {
+        if (stockHome.isEmpty() || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false;
+        ResolveInfo home = getPackageManager().resolveActivity(
+                new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), PackageManager.MATCH_DEFAULT_ONLY);
+        return home != null && stockHomePackage.equals(home.activityInfo.packageName);
     }
 
     private void openSettings() {
@@ -287,6 +409,13 @@ public class HomeKeyService extends AccessibilityService {
 
     @Override
     protected boolean onKeyEvent(KeyEvent event) {
+        // power_on_home: the first key after power-on hands the TV to the user (power and wake keys don't count).
+        if (powerOnUntil != 0 && event.getAction() == KeyEvent.ACTION_DOWN
+                && event.getKeyCode() != KeyEvent.KEYCODE_POWER && event.getKeyCode() != KeyEvent.KEYCODE_WAKEUP) {
+            powerOnUntil = 0;
+        }
+        if (consumeVolumeKeys && VolumeKeys.handle(this, event)) return true;
+
         // A scancode entry is more specific than any keycode, so it goes first.
         String scanApp = appScancodes.get(event.getScanCode());
         if (scanApp != null) {
@@ -348,7 +477,6 @@ public class HomeKeyService extends AccessibilityService {
         }
 
         // Apps button (KEYCODE_ALL_APPS); pass-through for other keys:
-        // if (event.getKeyCode() != KeyEvent.KEYCODE_ALL_APPS) return false;
         if (code == KeyEvent.KEYCODE_ALL_APPS) {
             if (event.getAction() == KeyEvent.ACTION_DOWN) {
                 if (event.getRepeatCount() == 0) {
@@ -439,6 +567,7 @@ public class HomeKeyService extends AccessibilityService {
             }
         }
 
+        if (event.getKeyCode() != KeyEvent.KEYCODE_ALL_APPS) return false;
         return false;
     }
 
@@ -562,6 +691,18 @@ public class HomeKeyService extends AccessibilityService {
         return best;
     }
 
+    /** Unbound by Android: the user turned the helper off, so Home doesn't put it back (ServiceRepair). */
+    @Override
+    public boolean onUnbind(Intent intent) {
+        stopWaitingForUnlock();
+        if (repairRecord && !steppingOut) ServiceRepair.disconnected(this, getClass());
+        handler.removeCallbacksAndMessages(null);
+        pendingDoubleTapKey = 0;
+        pendingSingleTapRunnable = null;
+        instance = null;
+        return super.onUnbind(intent);
+    }
+
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (event == null) return;
@@ -569,6 +710,13 @@ public class HomeKeyService extends AccessibilityService {
         CharSequence cls = event.getClassName();
         if (pkg != null) {
             foregroundPackage = pkg.toString();
+        }
+
+        // power_on_home: the firmware opened Live TV by itself at power-on, before anyone pressed a key.
+        if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+                && powerOnRedirect(powerOnLiveTv, pkg, SystemClock.elapsedRealtime(), powerOnUntil)) {
+            openHome();
+            return;
         }
 
         if (pkg != null && "com.google.android.apps.tv.launcherx".contentEquals(pkg)) {
@@ -580,17 +728,61 @@ public class HomeKeyService extends AccessibilityService {
                 handler.postDelayed(redirectHomeRunnable, 350L);
             }
         }
+
+        // stock_home_redirect: the firmware turned the stock launcher back on and its home screen came up.
+        if (!stockHome.isEmpty() && cls != null && stockHome.contains(cls.toString())) {
+            openHome();
+        }
+    }
+
+    /** How long power_on_home stays armed after the screen turns on without a reboot. */
+    static final long SCREEN_ON_WINDOW_MS = 60 * 1000L;
+
+    /** power_on_home: armed for the boot window (if this bind is part of the boot) and after every screen-on. */
+    private void armPowerOnHome() {
+        if (SystemClock.elapsedRealtime() < BOOT_WINDOW_MS) powerOnUntil = BOOT_WINDOW_MS;
+        if (screenOnReceiver != null) return;
+        screenOnReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                powerOnUntil = SystemClock.elapsedRealtime() + SCREEN_ON_WINDOW_MS;
+            }
+        };
+        registerReceiver(screenOnReceiver, new IntentFilter(Intent.ACTION_SCREEN_ON));
+    }
+
+    static boolean powerOnRedirect(String liveTv, CharSequence pkg, long now, long armedUntil) {
+        return !liveTv.isEmpty() && pkg != null && liveTv.contentEquals(pkg) && now < armedUntil;
+    }
+
+    /** How long after boot the first bind still counts as "at boot" for probeAtBoot. */
+    static final long BOOT_WINDOW_MS = 3 * 60 * 1000L;
+
+    /** stock_home_redirect at boot: the stock home is often on screen before Android binds this service, so no
+     *  window event for it arrives (#1116). Once per boot, open ProbeActivity: when it closes, whatever was in
+     *  front comes back and sends a window event, and onAccessibilityEvent covers it only if it is the stock home.
+     *  An HDMI input or an app that the TV resumed at boot is left alone. */
+    private void probeAtBoot() {
+        int boot = Settings.Global.getInt(getContentResolver(), Settings.Global.BOOT_COUNT, -1);
+        SharedPreferences prefs = getSharedPreferences("boot", MODE_PRIVATE);
+        if (!firstBindAfterBoot(boot, prefs.getInt("probe_boot", -1), SystemClock.elapsedRealtime())) return;
+        prefs.edit().putInt("probe_boot", boot).apply();
+        try {
+            startActivity(new Intent(this, ProbeActivity.class)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION));
+        } catch (ActivityNotFoundException | SecurityException ignored) {
+        }
+    }
+
+    static boolean firstBindAfterBoot(int boot, int lastBoot, long uptimeMs) {
+        return boot >= 0 && boot != lastBoot && uptimeMs < BOOT_WINDOW_MS;
+    }
+
+    static boolean isShortPress(long downTime, long upTime, long longPressTimeout) {
+        return upTime - downTime < longPressTimeout;
     }
 
     @Override
     public void onInterrupt() {
-        handler.removeCallbacks(homeLongPressRunnable);
-        handler.removeCallbacks(appsLongPressRunnable);
-        handler.removeCallbacks(redirectHomeRunnable);
-        if (pendingSingleTapRunnable != null) {
-            handler.removeCallbacks(pendingSingleTapRunnable);
-            pendingDoubleTapKey = 0;
-            pendingSingleTapRunnable = null;
-        }
     }
 }

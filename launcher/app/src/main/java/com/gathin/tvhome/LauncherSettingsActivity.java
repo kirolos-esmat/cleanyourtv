@@ -5,6 +5,8 @@ import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.view.LayoutInflater;
@@ -18,6 +20,8 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /** Remote-friendly settings owned by the launcher; system settings stay one row away. */
@@ -34,6 +38,7 @@ public final class LauncherSettingsActivity extends Activity {
     private TextView animationsChoice;
     private TextView advancedChoice;
     private TextView followThemeChoice;
+    private TextView openOnStartChoice;
     private int columns;
     private int rowsBelowDock;
     private boolean ambientGlow;
@@ -134,6 +139,11 @@ public final class LauncherSettingsActivity extends Activity {
                         .show();
             }
         });
+        openOnStartChoice = findViewById(R.id.openOnStartChoice);
+        if (config.openOnStartChoice) {
+            openOnStartChoice.setVisibility(View.VISIBLE);
+            openOnStartChoice.setOnClickListener(v -> showOpenOnStartPicker());
+        }
         followThemeChoice = findViewById(R.id.followThemeChoice);
         followThemeChoice.setOnClickListener(v -> {
             if (!hasOnTvChoices()) return;
@@ -141,7 +151,8 @@ public final class LauncherSettingsActivity extends Activity {
                     .remove("advanced_effects").remove(Config.WALLPAPER_CHOICE_KEY)
                     .remove("wallpaper_rotation_minutes")
                     .remove(Config.AMBIENT_GLOW_KEY)
-                    .remove(Config.DOCK_OPACITY_KEY).commit();
+                    .remove(Config.DOCK_OPACITY_KEY)
+                    .remove(OpenOnStart.KEY).commit();
             Config current = Config.load(this);
             columns = current.columns;
             rowsBelowDock = current.rowsBelowDock;
@@ -340,6 +351,62 @@ public final class LauncherSettingsActivity extends Activity {
         });
     }
 
+    /** Off, then every app with a TV entry point by name. Saved at once; it is read on the next boot. */
+    private void showOpenOnStartPicker() {
+        PackageManager pm = getPackageManager();
+        List<String[]> apps = new ArrayList<>();
+        Intent tv = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER);
+        for (ResolveInfo r : pm.queryIntentActivities(tv, 0)) {
+            String pkg = r.activityInfo.packageName;
+            if (pkg.equals(getPackageName())) continue;
+            boolean seen = false;
+            for (String[] a : apps) seen |= a[1].equals(pkg);
+            if (!seen) apps.add(new String[]{r.loadLabel(pm).toString(), pkg});
+        }
+        Collections.sort(apps, (a, b) -> a[0].compareToIgnoreCase(b[0]));
+        String[] labels = new String[apps.size() + 1];
+        labels[0] = getString(R.string.off);
+        String current = choices.getString(OpenOnStart.KEY, "");
+        int checked = 0;
+        for (int i = 0; i < apps.size(); i++) {
+            labels[i + 1] = apps.get(i)[0];
+            if (apps.get(i)[1].equals(current)) checked = i + 1;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.open_on_start_label)
+                .setSingleChoiceItems(labels, checked, (dialog, which) -> {
+                    dialog.dismiss();
+                    if (which == 0) choices.edit().remove(OpenOnStart.KEY).apply();
+                    else {
+                        OpenOnStart.skipThisBoot(this);
+                        choices.edit().putString(OpenOnStart.KEY, apps.get(which - 1)[1]).apply();
+                    }
+                    refresh();
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    /** The picked app's name, its package when it is gone, or Off. */
+    private String openOnStartLabel() {
+        String pkg = choices.getString(OpenOnStart.KEY, "");
+        if (pkg.isEmpty()) return getString(R.string.off);
+        try {
+            PackageManager pm = getPackageManager();
+            return pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString();
+        } catch (PackageManager.NameNotFoundException e) {
+            return pkg;
+        }
+    }
+
+    private static int indexOf(List<File> images, String name) {
+        if (name == null) return -1;
+        for (int i = 0; i < images.size(); i++) {
+            if (images.get(i).getName().equals(name)) return i;
+        }
+        return -1;
+    }
+
     /**
      * A choice was saved. Home rebuilds when it next resumes because the change count moved, whether these
      * settings are left with Back or with the remote's Home button (which cancels the activity result).
@@ -387,6 +454,9 @@ public final class LauncherSettingsActivity extends Activity {
             wpText = getString(R.string.wallpaper_theme_default);
         }
         wallpaperChoice.setText(getString(R.string.wallpaper_state, wpText));
+        if (openOnStartChoice != null) {
+            openOnStartChoice.setText(getString(R.string.open_on_start_state, openOnStartLabel()));
+        }
         followThemeChoice.setSelected(!hasOnTvChoices());
     }
 
@@ -396,7 +466,8 @@ public final class LauncherSettingsActivity extends Activity {
                 || choices.contains(Config.WALLPAPER_CHOICE_KEY)
                 || choices.contains("wallpaper_rotation_minutes")
                 || choices.contains(Config.AMBIENT_GLOW_KEY)
-                || choices.contains(Config.DOCK_OPACITY_KEY);
+                || choices.contains(Config.DOCK_OPACITY_KEY)
+                || choices.contains(OpenOnStart.KEY);
     }
 
     private void open(Intent intent) {

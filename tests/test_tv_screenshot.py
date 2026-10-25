@@ -174,6 +174,22 @@ class ScreenshotTest(unittest.TestCase):
             self.run_tv(["--screenshot", str(Path(tmp) / "a.png")])
             self.assertEqual(self.sleeps, [])
 
+    def test_wait_without_keys_still_pauses_before_the_capture(self):
+        # --wait with no keys used to be read and then dropped, so the capture came straight away.
+        with tempfile.TemporaryDirectory() as tmp:
+            code, _, err, device = self.run_tv(["--screenshot", str(Path(tmp) / "a.png"), "--wait", "3"])
+            self.assertEqual(code, 0, err)
+            self.assertEqual(self.sleeps, [3.0])
+            self.assertFalse(any("keyevent" in c[1] for c in device.calls if c[0] == "shell"))
+
+    def test_wait_without_a_number_says_so(self):
+        # A trailing --wait used to be reported as "not a key name: '--wait'".
+        code, _, err, device = self.run_tv(["--screenshot", "a.png", "HOME", "--wait"])
+        self.assertEqual(code, 2)
+        self.assertIn("--wait needs a number of seconds", err)
+        self.assertNotIn("not a key name", err)
+        self.assertEqual(device.calls, [], "nothing may reach the TV")
+
     def test_bad_key_names_and_waits_never_reach_the_tv(self):
         for args in (["--screenshot", "a.png", "home"], ["--screenshot", "a.png", "HOME;reboot"],
                      ["--screenshot", "a.png", "--wait", "-1"], ["--screenshot", "a.png", "--wait", "soon"]):

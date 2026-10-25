@@ -30,6 +30,9 @@ public class GlassView extends View {
     private int glowRgb = 0xFFFFFF;
     /** Glow strength: the white glow stays faint, a coloured one needs more alpha to read as warm light. */
     private int glowAlpha = 0x30;
+    /** glass_style rim or halo: no sheen and no fill, only the crisp rim (and, for halo, a lighter outer glow). */
+    private boolean flat;
+    private boolean halo;
 
     public GlassView(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -71,6 +74,14 @@ public class GlassView extends View {
         invalidate();
     }
 
+    /** One of Config's GLASS_* styles. */
+    void setStyle(String style) {
+        flat = Config.GLASS_RIM.equals(style) || Config.GLASS_HALO.equals(style);
+        halo = Config.GLASS_HALO.equals(style);
+        rim.setStrokeWidth((flat ? 2f : 1.5f) * density);
+        invalidate();
+    }
+
     void setRadius(float px) {
         radius = px;
         invalidate();
@@ -88,6 +99,32 @@ public class GlassView extends View {
         float inset = INSET_DP * density;   // room for the diffusion and downward shadow
         rect.set(inset, inset, getWidth() - inset, getHeight() - inset);
 
+        if (!flat || halo) {
+            int alpha = flat ? glowAlpha / 2 : glowAlpha;
+            // Tight, smooth focus diffusion
+            float o1 = 1.0f * density;
+            glow.setStrokeWidth(2.0f * density);
+            glow.setColor((Math.round(alpha * 0.45f) << 24) | glowRgb);
+            canvas.drawRoundRect(rect.left - o1, rect.top - o1, rect.right + o1, rect.bottom + o1,
+                    radius + o1, radius + o1, glow);
+
+            float o2 = 2.5f * density;
+            glow.setStrokeWidth(2.5f * density);
+            glow.setColor((Math.round(alpha * 0.20f) << 24) | glowRgb);
+            canvas.drawRoundRect(rect.left - o2, rect.top - o2, rect.right + o2, rect.bottom + o2,
+                    radius + o2, radius + o2, glow);
+
+            float o3 = 4.5f * density;
+            glow.setStrokeWidth(3.0f * density);
+            glow.setColor((Math.round(alpha * 0.08f) << 24) | glowRgb);
+            canvas.drawRoundRect(rect.left - o3, rect.top - o3, rect.right + o3, rect.bottom + o3,
+                    radius + o3, radius + o3, glow);
+        }
+        if (flat) {
+            canvas.drawRoundRect(rect, radius, radius, rim);
+            return;
+        }
+
         // 1. Subtle downward grounding shadow (GPU-safe restrained low-alpha layers)
         float dy1 = 2f * density, s1 = 1.5f * density;
         shadowPaint.setColor(0x14000000);
@@ -98,25 +135,6 @@ public class GlassView extends View {
         shadowPaint.setColor(0x10000000);
         canvas.drawRoundRect(rect.left - s2, rect.top - s2 + dy2, rect.right + s2, rect.bottom + s2 + dy2,
                 radius + s2, radius + s2, shadowPaint);
-
-        // 2. Tight, smooth focus diffusion (replaces 12-ring outer-stroke loop with crisp ambient diffusion)
-        float o1 = 1.0f * density;
-        glow.setStrokeWidth(2.0f * density);
-        glow.setColor((Math.round(glowAlpha * 0.45f) << 24) | glowRgb);
-        canvas.drawRoundRect(rect.left - o1, rect.top - o1, rect.right + o1, rect.bottom + o1,
-                radius + o1, radius + o1, glow);
-
-        float o2 = 2.5f * density;
-        glow.setStrokeWidth(2.5f * density);
-        glow.setColor((Math.round(glowAlpha * 0.20f) << 24) | glowRgb);
-        canvas.drawRoundRect(rect.left - o2, rect.top - o2, rect.right + o2, rect.bottom + o2,
-                radius + o2, radius + o2, glow);
-
-        float o3 = 4.5f * density;
-        glow.setStrokeWidth(3.0f * density);
-        glow.setColor((Math.round(glowAlpha * 0.08f) << 24) | glowRgb);
-        canvas.drawRoundRect(rect.left - o3, rect.top - o3, rect.right + o3, rect.bottom + o3,
-                radius + o3, radius + o3, glow);
 
         // 3. Translucent glass fill
         canvas.drawRoundRect(rect, radius, radius, fill);

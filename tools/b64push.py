@@ -5,6 +5,9 @@ Usage: b64push.py <local file> <remote path>
 
 The file is assembled under a temporary name next to the target and checked with md5sum; only a
 matching copy is moved over the target, so a failed or corrupted transfer leaves the old file alone.
+
+Exit status: 0 the copy is on the TV, 1 a transfer failed (the target is as it was), 2 the
+arguments were refused, so nothing was sent and no TV was opened.
 """
 import base64
 import hashlib
@@ -40,8 +43,16 @@ def main():
         sys.stderr.write(f"refusing remote path {remote!r}: use an absolute path of letters, digits, "
                          "'.', '_', '-' and '/', without '..'\n")
         return 2
-    with open(local, "rb") as f:
-        data = f.read()
+    # Read the file here, before the TV is opened: a path typed from the wrong folder, or a build
+    # that left no APK behind, is an argument that is wrong rather than a transfer that failed, and
+    # exit 1 would look to the caller like a push that started. The OSError covers all three ways in
+    # - no such file, a directory, a file in the middle of the path - with the reason the OS gave.
+    try:
+        with open(local, "rb") as f:
+            data = f.read()
+    except OSError as error:
+        sys.stderr.write(f"cannot read {local!r}: {error.strerror or error}. Nothing was sent to the TV.\n")
+        return 2
     want = hashlib.md5(data).hexdigest()
 
     # Imported only now: tv.py exits at import time when TV_HOST is unset, which would hide the
