@@ -736,7 +736,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         btnInputs.setOnLongClickListener(v -> {
             Intent liveTv = liveTvIntent();
             if (liveTv == null) {
-                for (String p : new String[]{"com.mitv.tvhome.mitvplus", "com.nst.iptvsmarterstvbox", "com.nostalgiatv.nostalgia_tv"}) {
+                for (String p : new String[]{"com.nostalgiatv.nostalgia_tv", "com.nst.iptvsmarterstvbox", "com.mitv.tvhome.mitvplus"}) {
                     Intent i = getPackageManager().getLeanbackLaunchIntentForPackage(p);
                     if (i == null) i = getPackageManager().getLaunchIntentForPackage(p);
                     if (i != null) {
@@ -3031,6 +3031,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private Intent liveTvIntent() {
         if (liveTvPkg.isEmpty()) return null;
         Intent i = getPackageManager().getLeanbackLaunchIntentForPackage(liveTvPkg);
+        if (i == null) i = getPackageManager().getLaunchIntentForPackage(liveTvPkg);
         if (i != null || liveTvAction.isEmpty()) return i;
         Intent byAction = new Intent(liveTvAction).setPackage(liveTvPkg);
         return getPackageManager().resolveActivity(byAction, 0) != null ? byAction : null;
