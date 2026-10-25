@@ -2,6 +2,7 @@ package com.gathin.tvhome;
 
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
+import android.app.ActivityManager;
 import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -11,6 +12,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.Rect;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
@@ -25,9 +27,11 @@ import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -141,6 +145,328 @@ public class HomeKeyService extends AccessibilityService {
                 || className.contains("VanillaModeHomeActivity");
     }
 
+    private static final Set<String> FORCE_STOP_IGNORED = new HashSet<>(Arrays.asList(
+            "android",
+            "com.android.systemui",
+            "com.google.android.apps.tv.launcherx",
+            "com.google.android.apps.tv.dreamx",
+            "com.google.android.apps.mediashell",
+            "com.google.android.tungsten.setupwraith",
+            "com.android.tv.settings",
+            "com.android.settings",
+            "com.google.android.katniss",
+            "com.google.android.inputmethod.latin",
+            "com.android.shell",
+            "com.android.providers.settings",
+            "com.gathin.tvhome"
+    ));
+
+    private final List<String> forceStopQueue = new ArrayList<>();
+    private String currentForceStopPkg = null;
+    private long currentForceStopStartTime = 0;
+    private int forceStopStep = 0;
+    private Runnable onForceStopComplete = null;
+    private boolean suppressingKeyBack = false;
+
+    private void performBackAction() {
+        suppressingKeyBack = true;
+        performGlobalAction(GLOBAL_ACTION_BACK);
+        handler.postDelayed(() -> suppressingKeyBack = false, 350);
+    }
+
+    private final Runnable forceStopTimeoutRunnable = () -> {
+        if (!forceStopQueue.isEmpty()) {
+            processNextForceStop();
+        } else {
+            currentForceStopPkg = null;
+            forceStopStep = 0;
+            performBackAction();
+            handler.postDelayed(this::openHome, 100);
+            if (onForceStopComplete != null) {
+                onForceStopComplete.run();
+                onForceStopComplete = null;
+            }
+        }
+    };
+
+    public void forceStopPackage(String packageName) {
+        if (packageName == null || packageName.isEmpty()) return;
+        List<String> list = new ArrayList<>();
+        list.add(packageName);
+        forceStopPackages(list, null);
+    }
+
+    public void forceStopPackages(List<String> packages, Runnable onComplete) {
+        if (packages == null || packages.isEmpty()) {
+            if (onComplete != null) onComplete.run();
+            return;
+        }
+        handler.post(() -> {
+            cancelForceStopQueue();
+            for (String p : packages) {
+                if (p != null && !p.isEmpty() && !p.equals(getPackageName()) && !FORCE_STOP_IGNORED.contains(p)) {
+                    forceStopQueue.add(p);
+                }
+            }
+            onForceStopComplete = onComplete;
+            if (forceStopQueue.isEmpty()) {
+                if (onForceStopComplete != null) {
+                    onForceStopComplete.run();
+                    onForceStopComplete = null;
+                }
+                return;
+            }
+            processNextForceStop();
+        });
+    }
+
+    private void cancelForceStopQueue() {
+        handler.removeCallbacks(forceStopTimeoutRunnable);
+        forceStopQueue.clear();
+        currentForceStopPkg = null;
+        forceStopStep = 0;
+        if (onForceStopComplete != null) {
+            onForceStopComplete = null;
+        }
+    }
+
+    private void processNextForceStop() {
+        handler.removeCallbacks(forceStopTimeoutRunnable);
+        if (forceStopQueue.isEmpty()) {
+            currentForceStopPkg = null;
+            forceStopStep = 0;
+            performBackAction();
+            handler.postDelayed(this::openHome, 100);
+            if (onForceStopComplete != null) {
+                onForceStopComplete.run();
+                onForceStopComplete = null;
+            }
+            return;
+        }
+
+        currentForceStopPkg = forceStopQueue.remove(0);
+        forceStopStep = 1;
+        currentForceStopStartTime = System.currentTimeMillis();
+
+        try {
+            ActivityManager am = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+            if (am != null) {
+                am.killBackgroundProcesses(currentForceStopPkg);
+            }
+        } catch (Exception ignored) {}
+
+        handler.postDelayed(forceStopTimeoutRunnable, 1500);
+
+        try {
+            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+            intent.setData(Uri.fromParts("package", currentForceStopPkg, null));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
+            startActivity(intent);
+            handler.postDelayed(() -> {
+                if (forceStopStep == 1) {
+                    handleForceStopDetails();
+                }
+            }, 100);
+        } catch (Exception e) {
+            handler.removeCallbacks(forceStopTimeoutRunnable);
+            handler.post(this::processNextForceStop);
+        }
+    }
+
+    private boolean isScreenForPackage(AccessibilityNodeInfo root, String expectedPkg) {
+        if (root == null || expectedPkg == null) return false;
+        List<AccessibilityNodeInfo> summaries = root.findAccessibilityNodeInfosByViewId("android:id/summary");
+        if (summaries != null && !summaries.isEmpty()) {
+            for (AccessibilityNodeInfo s : summaries) {
+                CharSequence text = s.getText();
+                s.recycle();
+                if (text != null && text.toString().trim().equalsIgnoreCase(expectedPkg)) {
+                    return true;
+                }
+            }
+        }
+        List<AccessibilityNodeInfo> found = root.findAccessibilityNodeInfosByText(expectedPkg);
+        if (found != null && !found.isEmpty()) {
+            for (AccessibilityNodeInfo f : found) f.recycle();
+            return true;
+        }
+        return false;
+    }
+
+    private boolean isScreenForApp(AccessibilityNodeInfo root, String expectedPkg) {
+        if (root == null || expectedPkg == null) return false;
+        if (isScreenForPackage(root, expectedPkg)) return true;
+        try {
+            PackageManager pm = getPackageManager();
+            CharSequence label = pm.getApplicationLabel(pm.getApplicationInfo(expectedPkg, 0));
+            if (label != null) {
+                List<AccessibilityNodeInfo> found = root.findAccessibilityNodeInfosByText(label.toString());
+                if (found != null && !found.isEmpty()) {
+                    for (AccessibilityNodeInfo f : found) f.recycle();
+                    return true;
+                }
+            }
+        } catch (Exception ignored) {}
+        return false;
+    }
+
+    private static boolean isForceStopText(CharSequence cs) {
+        if (cs == null) return false;
+        String t = cs.toString().trim().toLowerCase(Locale.ROOT);
+        return t.equals("force stop")
+                || t.contains("force stop")
+                || t.contains("فرض الإيقاف")
+                || t.contains("إيقاف إجباري")
+                || t.contains("forcer l'arrêt")
+                || t.contains("forzar detención")
+                || t.contains("beenden erzwingen")
+                || t.contains("остановить")
+                || t.contains("zorla durdur")
+                || t.contains("forçar parada")
+                || t.contains("强行停止")
+                || t.contains("termina")
+                || t.contains("forza interruzione");
+    }
+
+    private static boolean isConfirmText(CharSequence cs) {
+        if (cs == null) return false;
+        String t = cs.toString().trim().toLowerCase(Locale.ROOT);
+        return t.equals("ok")
+                || t.equals("موافق")
+                || t.equals("حسنا")
+                || t.equals("حسناً")
+                || t.equals("نعم")
+                || t.equals("yes")
+                || t.equals("oui")
+                || t.equals("aceptar")
+                || t.equals("да")
+                || t.equals("tamam")
+                || t.equals("确定")
+                || t.equals("conferma");
+    }
+
+    private AccessibilityNodeInfo findForceStopNode(AccessibilityNodeInfo node) {
+        if (node == null) return null;
+        if (isForceStopText(node.getText()) || isForceStopText(node.getContentDescription())) {
+            return AccessibilityNodeInfo.obtain(node);
+        }
+        int count = node.getChildCount();
+        for (int i = 0; i < count; i++) {
+            AccessibilityNodeInfo child = node.getChild(i);
+            if (child != null) {
+                AccessibilityNodeInfo found = findForceStopNode(child);
+                child.recycle();
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
+    private AccessibilityNodeInfo findConfirmNode(AccessibilityNodeInfo node) {
+        if (node == null) return null;
+        if (isConfirmText(node.getText()) || isConfirmText(node.getContentDescription())) {
+            return AccessibilityNodeInfo.obtain(node);
+        }
+        int count = node.getChildCount();
+        for (int i = 0; i < count; i++) {
+            AccessibilityNodeInfo child = node.getChild(i);
+            if (child != null) {
+                AccessibilityNodeInfo found = findConfirmNode(child);
+                child.recycle();
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
+    private AccessibilityNodeInfo findClickableAncestor(AccessibilityNodeInfo node) {
+        AccessibilityNodeInfo cur = node;
+        while (cur != null) {
+            if (cur.isClickable()) {
+                return cur;
+            }
+            AccessibilityNodeInfo parent = cur.getParent();
+            if (cur != node) cur.recycle();
+            cur = parent;
+        }
+        return null;
+    }
+
+    private void handleForceStopDetails() {
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null) {
+            handler.postDelayed(() -> {
+                if (forceStopStep == 1) handleForceStopDetails();
+            }, 60);
+            return;
+        }
+        try {
+            long elapsed = System.currentTimeMillis() - currentForceStopStartTime;
+            if (!isScreenForApp(root, currentForceStopPkg) && elapsed < 400) {
+                handler.postDelayed(() -> {
+                    if (forceStopStep == 1) handleForceStopDetails();
+                }, 60);
+                return;
+            }
+            AccessibilityNodeInfo forceStopNode = findForceStopNode(root);
+            if (forceStopNode != null) {
+                AccessibilityNodeInfo clickable = findClickableAncestor(forceStopNode);
+                if (forceStopNode != clickable) forceStopNode.recycle();
+                if (clickable != null) {
+                    if (clickable.isEnabled()) {
+                        forceStopStep = 2;
+                        clickable.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                        clickable.recycle();
+                        handler.postDelayed(() -> {
+                            if (forceStopStep == 2) handleForceStopConfirm();
+                        }, 60);
+                        return;
+                    } else {
+                        clickable.recycle();
+                        handler.removeCallbacks(forceStopTimeoutRunnable);
+                        handler.postDelayed(this::processNextForceStop, 50);
+                        return;
+                    }
+                }
+            }
+            handler.postDelayed(() -> {
+                if (forceStopStep == 1) handleForceStopDetails();
+            }, 60);
+        } finally {
+            root.recycle();
+        }
+    }
+
+    private void handleForceStopConfirm() {
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null) {
+            handler.postDelayed(() -> {
+                if (forceStopStep == 2) handleForceStopConfirm();
+            }, 60);
+            return;
+        }
+        try {
+            AccessibilityNodeInfo confirmNode = findConfirmNode(root);
+            if (confirmNode != null) {
+                AccessibilityNodeInfo clickable = findClickableAncestor(confirmNode);
+                if (confirmNode != clickable) confirmNode.recycle();
+                if (clickable != null) {
+                    forceStopStep = 3;
+                    handler.removeCallbacks(forceStopTimeoutRunnable);
+                    clickable.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                    clickable.recycle();
+                    handler.postDelayed(this::processNextForceStop, 100);
+                    return;
+                }
+            }
+            handler.postDelayed(() -> {
+                if (forceStopStep == 2) handleForceStopConfirm();
+            }, 60);
+        } finally {
+            root.recycle();
+        }
+    }
+
     private boolean isDashboardActive() {
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null) return false;
@@ -181,7 +507,8 @@ public class HomeKeyService extends AccessibilityService {
             info.flags |= AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS
                     | AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;
             info.eventTypes |= AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
-                    | AccessibilityEvent.TYPE_WINDOWS_CHANGED;
+                    | AccessibilityEvent.TYPE_WINDOWS_CHANGED
+                    | AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED;
             setServiceInfo(info);
         }
         settingsScancodes = getResources().getIntArray(R.array.settings_key_scancodes);
@@ -409,6 +736,11 @@ public class HomeKeyService extends AccessibilityService {
 
     @Override
     protected boolean onKeyEvent(KeyEvent event) {
+        if (forceStopStep > 0 && event.getAction() == KeyEvent.ACTION_DOWN) {
+            if (!suppressingKeyBack && (event.getKeyCode() == KeyEvent.KEYCODE_HOME || event.getKeyCode() == KeyEvent.KEYCODE_BACK)) {
+                cancelForceStopQueue();
+            }
+        }
         // power_on_home: the first key after power-on hands the TV to the user (power and wake keys don't count).
         if (powerOnUntil != 0 && event.getAction() == KeyEvent.ACTION_DOWN
                 && event.getKeyCode() != KeyEvent.KEYCODE_POWER && event.getKeyCode() != KeyEvent.KEYCODE_WAKEUP) {
@@ -694,6 +1026,7 @@ public class HomeKeyService extends AccessibilityService {
     /** Unbound by Android: the user turned the helper off, so Home doesn't put it back (ServiceRepair). */
     @Override
     public boolean onUnbind(Intent intent) {
+        cancelForceStopQueue();
         stopWaitingForUnlock();
         if (repairRecord && !steppingOut) ServiceRepair.disconnected(this, getClass());
         handler.removeCallbacksAndMessages(null);
@@ -708,6 +1041,17 @@ public class HomeKeyService extends AccessibilityService {
         if (event == null) return;
         CharSequence pkg = event.getPackageName();
         CharSequence cls = event.getClassName();
+
+        if (forceStopStep > 0 && currentForceStopPkg != null) {
+            if (pkg != null && ("com.android.tv.settings".contentEquals(pkg) || "com.android.settings".contentEquals(pkg))) {
+                if (forceStopStep == 1) {
+                    handleForceStopDetails();
+                } else if (forceStopStep == 2) {
+                    handleForceStopConfirm();
+                }
+                return;
+            }
+        }
         if (pkg != null) {
             foregroundPackage = pkg.toString();
             if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {

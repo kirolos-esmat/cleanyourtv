@@ -212,18 +212,17 @@ final class TaskManager {
         try {
             ActivityManager am = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
             if (am != null) {
-                try {
-                    Method forceStop = ActivityManager.class.getMethod("forceStopPackage", String.class);
-                    forceStop.setAccessible(true);
-                    forceStop.invoke(am, packageName);
-                } catch (Exception ignored) {}
                 am.killBackgroundProcesses(packageName);
             }
         } catch (Exception ignored) {}
+
+        if (HomeKeyService.instance != null) {
+            HomeKeyService.instance.forceStopPackage(packageName);
+        }
     }
 
     static void closeAll(Context context, List<AppEntry> apps) {
-        if (apps == null) return;
+        if (apps == null || apps.isEmpty()) return;
         long now = System.currentTimeMillis();
         try {
             SharedPreferences.Editor editor = context.getSharedPreferences(PREFS_CLOSED, Context.MODE_PRIVATE).edit();
@@ -233,17 +232,23 @@ final class TaskManager {
             editor.apply();
         } catch (Exception ignored) {}
 
-        for (AppEntry app : apps) {
-            closeApp(context, app.packageName);
-        }
+        List<String> pkgs = new ArrayList<>();
         try {
             ActivityManager am = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
-            if (am != null) {
-                for (AppEntry app : apps) {
-                    am.killBackgroundProcesses(app.packageName);
+            for (AppEntry app : apps) {
+                removeActiveApp(context, app.packageName);
+                if (!IGNORED_PACKAGES.contains(app.packageName)) {
+                    pkgs.add(app.packageName);
+                    if (am != null) {
+                        am.killBackgroundProcesses(app.packageName);
+                    }
                 }
             }
         } catch (Exception ignored) {}
+
+        if (HomeKeyService.instance != null && !pkgs.isEmpty()) {
+            HomeKeyService.instance.forceStopPackages(pkgs, null);
+        }
         System.gc();
     }
 }

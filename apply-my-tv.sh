@@ -40,6 +40,11 @@ adb -s "$TV_HOST:5555" shell appops set com.gathin.tvhome GET_USAGE_STATS allow 
 adb -s "$TV_HOST:5555" shell pm grant com.gathin.tvhome android.permission.PACKAGE_USAGE_STATS 2>/dev/null || true
 adb -s "$TV_HOST:5555" shell pm grant com.gathin.tvhome android.permission.FORCE_STOP_PACKAGES 2>/dev/null || true
 
+if [ -f "launcher/app/build/outputs/apk/release/app-release.apk" ]; then
+    echo "Installing latest CleanYourTV release APK..."
+    adb -s "$TV_HOST:5555" install -r launcher/app/build/outputs/apk/release/app-release.apk
+fi
+
 echo "Enabling HomeKeyService accessibility service and self-repair permissions..."
 adb -s "$TV_HOST:5555" shell pm grant com.gathin.tvhome android.permission.WRITE_SECURE_SETTINGS 2>/dev/null || true
 adb -s "$TV_HOST:5555" shell cmd appops set com.gathin.tvhome AUTO_START allow 2>/dev/null || true

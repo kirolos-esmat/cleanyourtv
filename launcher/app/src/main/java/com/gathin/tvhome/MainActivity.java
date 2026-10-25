@@ -3467,11 +3467,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             closeStatus.setText(R.string.close_all_sub);
             closeStatus.setVisibility(View.VISIBLE);
             closeAllRow.setOnClickListener(v -> {
+                popup.dismiss();
                 TaskManager.closeAll(this, apps);
                 trimMemoryNow();
                 updateTaskManagerPill();
                 Toast.makeText(this, R.string.apps_closed_toast, Toast.LENGTH_SHORT).show();
-                popup.dismiss();
             });
             rows.addView(closeAllRow);
 
@@ -3503,14 +3503,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 status.setVisibility(View.VISIBLE);
 
                 row.setOnClickListener(v -> {
+                    popup.dismiss();
                     TaskManager.closeApp(this, app.packageName);
                     trimMemoryNow();
                     updateTaskManagerPill();
                     Toast.makeText(this, getString(R.string.app_closed_toast, app.appName), Toast.LENGTH_SHORT).show();
-                    rows.removeView(row);
-                    if (rows.getChildCount() <= 2) {
-                        popup.dismiss();
-                    }
                 });
 
                 rows.addView(row);

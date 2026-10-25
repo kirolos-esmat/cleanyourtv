@@ -117,16 +117,19 @@ final class WallpaperPlayer {
             String cachedChoice = context.getSharedPreferences("tvhome_online_wp", Context.MODE_PRIVATE)
                     .getString("cached_choice", "");
             File cached = OnlineWallpaper.getCacheFile(context);
-            if (onlineChoice.equals(cachedChoice) && cached.exists() && cached.length() > 0) {
+            if (cached.exists() && cached.length() > 0) {
                 Bitmap bitmap = decode(cached);
                 if (bitmap != null) {
+                    current = bitmap;
                     image.setImageBitmap(bitmap);
                     root.setBackground(null);
                     displayed = onlineChoice;
                     if (preferences.getLong("changed", 0) == 0) {
                         preferences.edit().putLong("changed", System.currentTimeMillis()).apply();
                     }
-                    return;
+                    if (onlineChoice.equals(cachedChoice)) {
+                        return;
+                    }
                 }
             }
             fetchOnlineWallpaper();
@@ -140,6 +143,7 @@ final class WallpaperPlayer {
         while (first != null) {
             Bitmap bitmap = decode(first);
             if (bitmap != null) {
+                current = bitmap;
                 image.setImageBitmap(bitmap);
                 // The picture covers the whole screen: the root's plain colour under it is overdraw.
                 root.setBackground(null);
@@ -284,6 +288,9 @@ final class WallpaperPlayer {
 
     void start() {
         active = true;
+        if (image.getDrawable() == null) {
+            showFirst();
+        }
         update();
     }
 
@@ -293,8 +300,12 @@ final class WallpaperPlayer {
 
     /** Drops the wallpaper texture when Home is hidden and Android asks the process to free memory. */
     void releaseForMemoryPressure() {
-        if (current == null) return;
+        if (current == null && image.getDrawable() == null) return;
         image.setImageDrawable(null);
+        if (crossfadeImage != null) {
+            crossfadeImage.setImageDrawable(null);
+            crossfadeImage.setVisibility(View.GONE);
+        }
         // The renderer may still have a queued frame that references this hardware bitmap. Drop our references and
         // let Android reclaim its native buffer after rendering releases it instead of recycling it mid-frame.
         current = null;
