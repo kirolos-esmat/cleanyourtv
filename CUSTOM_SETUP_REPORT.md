@@ -120,8 +120,8 @@ The core launcher repository provides an ultra-lightweight, zero-telemetry, priv
    - Kept `com.google.android.apps.tv.dreamx` (Ambient screensaver), `com.google.android.apps.mediashell` (Cast receiver), and `com.google.android.tungsten.setupwraith` (Cast authentication & weather provider) active.
 2. **24/7 Weather Slideshows**:
    - Granted network location permissions (`ACCESS_COARSE_LOCATION` and `ACCESS_FINE_LOCATION`) and set system `location_mode 3` to resolve city forecast coordinates (Alexandria), preventing screensaver weather from disappearing at night.
-3. **AdGuard Private DNS**:
-   - Enforced system-wide DNS over TLS via `dns.adguard-dns.com` for ad-free operation across the OS.
+3. **DNS & Streaming Compatibility**:
+   - Private DNS kept off (`private_dns_mode off`) to ensure seamless connectivity and compatibility with IPTV providers and live streaming servers without ad-block domain filtering.
 
 ---
 
@@ -133,7 +133,7 @@ The repository includes an automated orchestration script [`apply-my-tv.sh`](fil
 - Automatically compiles and installs the latest release APK if rebuilt.
 - Grants task manager (`PACKAGE_USAGE_STATS`, `GET_USAGE_STATS`), location, and system settings permissions.
 - Bounces and enables `HomeKeyService` safely without triggering crash states.
-- Configures AdGuard Private DNS.
+- Ensures Private DNS is disabled for IPTV compatibility.
 - Brings CleanYourTV Home to the front.
 
 ---

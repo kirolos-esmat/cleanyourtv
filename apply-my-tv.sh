@@ -55,9 +55,9 @@ adb -s "$TV_HOST:5555" shell "settings put secure enabled_accessibility_services
 sleep 1
 adb -s "$TV_HOST:5555" shell "settings put secure enabled_accessibility_services '$NEW_SERVICES' && settings put secure accessibility_enabled 1"
 
-echo "Configuring AdGuard ad-blocking Private DNS..."
-adb -s "$TV_HOST:5555" shell settings put global private_dns_specifier dns.adguard-dns.com
-adb -s "$TV_HOST:5555" shell settings put global private_dns_mode hostname
+echo "Ensuring Private DNS is disabled (for IPTV compatibility)..."
+adb -s "$TV_HOST:5555" shell settings put global private_dns_mode off
+adb -s "$TV_HOST:5555" shell settings delete global private_dns_specifier 2>/dev/null || true
 
 echo "Bringing CleanYourTV Home to front..."
 adb -s "$TV_HOST:5555" shell am start -n com.gathin.tvhome/.MainActivity >/dev/null 2>&1 || true
