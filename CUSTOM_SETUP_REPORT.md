@@ -5,8 +5,9 @@
 **SoC:** Amlogic S905X4 (Quad-Core ARM Cortex-A55 @ 2.0 GHz, Mali-G31 MP2)  
 **Host IP / ADB:** `192.168.1.126:5555`  
 **Base Version:** Upstream CleanYourTV 3.0 (`v3.0.0`, versionCode 9)  
-**Custom Branch:** `main` (ahead of upstream `v3.0.0`)  
-**APK Size:** 564,301 Bytes (Strictly under the 589,824 B / 576 KB size gate)  
+**Current Fork Version:** [CleanYourTV v3.0.1 (Hardened Fork Build)](https://github.com/kirolos-esmat/cleanyourtv/releases/tag/v3.0.1) (`versionCode 10`)  
+**Custom Branch:** `main` (ahead of upstream `v3.0.0` by tag `v3.0.1`)  
+**APK Size:** 564,297 Bytes (Strictly under the 589,824 B / 576 KB size gate)  
 **Unit Tests:** 1,361 / 1,361 tests passing (`OK, skipped=11`)  
 
 ---
