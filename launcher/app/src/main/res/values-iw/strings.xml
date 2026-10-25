@@ -190,4 +190,10 @@
     <string name="cc_shuffle_title">החלפת טפט</string>
     <string name="cc_shuffle_sub">התמונה הבאה</string>
     <string name="cc_shuffling_toast">מחליף טפט...</string>
+    <string name="task_manager_stats">RAM %1$d%% · אחסון %2$d%%</string>
+    <string name="close_all">סגור הכל</string>
+    <string name="close_app">סגור אפליקציה</string>
+    <string name="no_running_apps">אין אפליקציות ברקע</string>
+    <string name="apps_closed_toast">כל האפליקציות נסגרו</string>
+    <string name="app_closed_toast">נסגר %1$s</string>
 </resources>

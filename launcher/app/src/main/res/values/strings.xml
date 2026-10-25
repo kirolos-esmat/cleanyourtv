@@ -194,4 +194,10 @@
     <string name="cc_shuffle_title">Shuffle Wallpaper</string>
     <string name="cc_shuffle_sub">Next photo</string>
     <string name="cc_shuffling_toast">Shuffling wallpaper...</string>
+    <string name="task_manager_stats">RAM %1$d%% · Storage %2$d%%</string>
+    <string name="close_all">Close all</string>
+    <string name="close_app">Close app</string>
+    <string name="no_running_apps">No background apps</string>
+    <string name="apps_closed_toast">All apps closed</string>
+    <string name="app_closed_toast">Closed %1$s</string>
 </resources>

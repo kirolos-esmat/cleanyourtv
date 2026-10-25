@@ -710,6 +710,9 @@ public class HomeKeyService extends AccessibilityService {
         CharSequence cls = event.getClassName();
         if (pkg != null) {
             foregroundPackage = pkg.toString();
+            if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+                TaskManager.recordActiveApp(this, foregroundPackage);
+            }
         }
 
         // power_on_home: the firmware opened Live TV by itself at power-on, before anyone pressed a key.

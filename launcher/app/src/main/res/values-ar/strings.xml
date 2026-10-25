@@ -139,4 +139,10 @@
     <string name="cc_shuffle_title">تبديل الخلفية</string>
     <string name="cc_shuffle_sub">الصورة التالية</string>
     <string name="cc_shuffling_toast">جارٍ تبديل الخلفية...</string>
+    <string name="task_manager_stats">الرام %1$d%% · التخزين %2$d%%</string>
+    <string name="close_all">إغلاق الكل</string>
+    <string name="close_app">إغلاق التطبيق</string>
+    <string name="no_running_apps">لا توجد تطبيقات في الخلفية</string>
+    <string name="apps_closed_toast">تم إغلاق جميع التطبيقات</string>
+    <string name="app_closed_toast">تم إغلاق %1$s</string>
 </resources>

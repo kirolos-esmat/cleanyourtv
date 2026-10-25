@@ -35,6 +35,11 @@ adb -s "$TV_HOST:5555" shell pm grant --user 10 com.google.android.apps.tv.dream
 adb -s "$TV_HOST:5555" shell pm grant com.gathin.tvhome android.permission.ACCESS_FINE_LOCATION 2>&1 || true
 adb -s "$TV_HOST:5555" shell pm grant com.gathin.tvhome android.permission.ACCESS_COARSE_LOCATION 2>&1 || true
 
+echo "Granting task manager & usage stats permissions..."
+adb -s "$TV_HOST:5555" shell appops set com.gathin.tvhome GET_USAGE_STATS allow 2>/dev/null || true
+adb -s "$TV_HOST:5555" shell pm grant com.gathin.tvhome android.permission.PACKAGE_USAGE_STATS 2>/dev/null || true
+adb -s "$TV_HOST:5555" shell pm grant com.gathin.tvhome android.permission.FORCE_STOP_PACKAGES 2>/dev/null || true
+
 echo "Enabling HomeKeyService accessibility service and self-repair permissions..."
 adb -s "$TV_HOST:5555" shell pm grant com.gathin.tvhome android.permission.WRITE_SECURE_SETTINGS 2>/dev/null || true
 adb -s "$TV_HOST:5555" shell cmd appops set com.gathin.tvhome AUTO_START allow 2>/dev/null || true

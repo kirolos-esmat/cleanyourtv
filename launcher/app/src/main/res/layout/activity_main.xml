@@ -418,9 +418,11 @@
 
                 <TextView
                     android:id="@+id/btnControlCenter"
-                    style="@style/TopButtonIcon"
+                    style="@style/TopButton"
                     android:contentDescription="@string/control_center"
-                    android:drawableStart="@drawable/ic_control_center"
+                    android:drawableStart="@drawable/ic_chip"
+                    android:text="RAM --% · Storage --%"
+                    android:singleLine="true"
                     android:nextFocusDown="@+id/grid" />
 
                 <TextView

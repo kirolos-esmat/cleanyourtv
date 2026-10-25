@@ -186,6 +186,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** config show_inputs_pill: false keeps the Inputs pill hidden even when the TV has inputs. */
     private boolean showInputsPill = true;
     private TextView btnWifi;
+    private TextView btnControlCenter;
     /** The network pill's icon as last set, so a refresh that changes nothing does not lay the top bar out again. */
     private int wifiIcon;
     /** The pills have been filled in once; later resumes refresh them after the first frame. */
@@ -377,6 +378,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         public void run() {
             updateGreeting();
             updateWeather();
+            updateTaskManagerPill();
             updateRace();
             // The pill follows the network callbacks and each return to Home; only the diya's flame follows the
             // signal level, so only it needs this minute's binder calls (about 7 ms on the UI thread).
@@ -743,8 +745,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             open(systemIntent(Settings.ACTION_WIFI_SETTINGS));
             return true;
         });
-        View btnControlCenter = findViewById(R.id.btnControlCenter);
-        if (btnControlCenter != null) btnControlCenter.setOnClickListener(v -> showControlCenter());
+        btnControlCenter = findViewById(R.id.btnControlCenter);
+        if (btnControlCenter != null) {
+            btnControlCenter.setOnClickListener(v -> showTaskManager());
+            btnControlCenter.setOnLongClickListener(v -> {
+                showControlCenter();
+                return true;
+            });
+            updateTaskManagerPill();
+        }
         launcherSettingsButton = cfg.launcherSettingsButton;
         if (launcherSettingsButton) {
             ((TextView) btnSettings).setText(R.string.launcher_settings);
@@ -800,7 +809,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (iconOnlyButtons) {
             if (cfg.wifiLabelWidth > 0) btnWifi.setMaxWidth(Math.round(cfg.wifiLabelWidth * density));
             else makeIconOnly(btnWifi);
-            if (btnControlCenter instanceof TextView) makeIconOnly((TextView) btnControlCenter);
             makeIconOnly((TextView) btnSettings);
         }
         if (cfg.iconOnlyInputs) makeIconOnly((TextView) btnInputs);
@@ -1012,6 +1020,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (openLiveTvAfterBoot()) return;
         updateGreeting();
         updateWeather();
+        updateTaskManagerPill();
         updateRace();
         // The network and Inputs pills keep their state while Home is in the background, and callbacks update them
         // when the network or the inputs change, so this refresh only catches anything missed. Its binder calls
@@ -3038,6 +3047,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     }
 
     private void open(Intent i) {
+        if (i.getComponent() != null) {
+            TaskManager.recordActiveApp(this, i.getComponent().getPackageName());
+        } else if (i.getPackage() != null) {
+            TaskManager.recordActiveApp(this, i.getPackage());
+        }
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         try {
             startActivity(i);
@@ -3383,13 +3397,104 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     // ---- Control Center --------------------------------------------------------------------------
 
+    private void updateTaskManagerPill() {
+        if (btnControlCenter == null) return;
+        long[] mem = memUsedOfTotalMb();
+        int ramPct = 0;
+        if (mem != null && mem[1] > 0) {
+            ramPct = (int) Math.min(100, Math.max(0, Math.round((double) mem[0] * 100.0 / mem[1])));
+        }
+        File dataDir = Environment.getDataDirectory();
+        long totalSpace = dataDir.getTotalSpace();
+        long freeSpace = dataDir.getFreeSpace();
+        int storagePct = totalSpace > 0 ? (int) Math.min(100, Math.max(0, Math.round((double) (totalSpace - freeSpace) * 100.0 / totalSpace))) : 0;
+        String text = getString(R.string.task_manager_stats, ramPct, storagePct);
+        btnControlCenter.setText(text);
+    }
+
+    private void showTaskManager() {
+        View anchor = btnControlCenter != null && btnControlCenter.getVisibility() == View.VISIBLE
+                ? btnControlCenter : findViewById(R.id.btnSettings);
+        View panel = getLayoutInflater().inflate(R.layout.popup_task_manager, root, false);
+        LinearLayout taskList = panel.findViewById(R.id.taskList);
+        View btnCloseAll = panel.findViewById(R.id.btnCloseAll);
+        TextView emptyText = panel.findViewById(R.id.emptyText);
+
+        int initialWidth = (int) (300 * density);
+        final PopupWindow popup = glassPopup(panel, initialWidth);
+        openPopup = popup;
+        popup.setOnDismissListener(() -> {
+            if (openPopup == popup) openPopup = null;
+        });
+
+        List<TaskManager.AppEntry> apps = TaskManager.getRecentApps(this);
+
+        if (apps.isEmpty()) {
+            btnCloseAll.setVisibility(View.GONE);
+            emptyText.setVisibility(View.VISIBLE);
+        } else {
+            emptyText.setVisibility(View.GONE);
+            btnCloseAll.setVisibility(View.VISIBLE);
+            btnCloseAll.setOnClickListener(v -> {
+                TaskManager.closeAll(this, apps);
+                trimMemoryNow();
+                updateTaskManagerPill();
+                Toast.makeText(this, R.string.apps_closed_toast, Toast.LENGTH_SHORT).show();
+                popup.dismiss();
+            });
+
+            for (TaskManager.AppEntry app : apps) {
+                View row = getLayoutInflater().inflate(R.layout.item_task_manager, taskList, false);
+                ImageView appIcon = row.findViewById(R.id.appIcon);
+                TextView appTitle = row.findViewById(R.id.appTitle);
+
+                if (app.icon != null) {
+                    appIcon.setImageDrawable(app.icon);
+                } else {
+                    appIcon.setImageResource(R.drawable.ic_apps);
+                }
+                appTitle.setText(app.appName);
+
+                row.setOnClickListener(v -> {
+                    TaskManager.closeApp(this, app.packageName);
+                    trimMemoryNow();
+                    updateTaskManagerPill();
+                    Toast.makeText(this, getString(R.string.app_closed_toast, app.appName), Toast.LENGTH_SHORT).show();
+                    taskList.removeView(row);
+                    if (taskList.getChildCount() == 0) {
+                        btnCloseAll.setVisibility(View.GONE);
+                        emptyText.setVisibility(View.VISIBLE);
+                        panel.postDelayed(popup::dismiss, 800);
+                    }
+                });
+
+                taskList.addView(row);
+            }
+        }
+
+        panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+        popup.setWidth(Math.max(initialWidth, panel.getMeasuredWidth()));
+        dropIn(popup, panel, anchor, getResources().getBoolean(R.bool.rtl_menu_bar)
+                ? Gravity.START : Gravity.END);
+
+        if (!apps.isEmpty()) {
+            btnCloseAll.requestFocus();
+        } else {
+            panel.requestFocus();
+        }
+    }
+
     private void showControlCenter() {
-        View anchor = findViewById(R.id.btnControlCenter);
-        if (anchor == null || anchor.getVisibility() != View.VISIBLE) anchor = findViewById(R.id.btnSettings);
+        View anchor = btnControlCenter != null && btnControlCenter.getVisibility() == View.VISIBLE
+                ? btnControlCenter : findViewById(R.id.btnSettings);
         View panel = getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
         LinearLayout rows = panel.findViewById(R.id.rows);
         int initialWidth = (int) (260 * density);
         PopupWindow popup = glassPopup(panel, initialWidth);
+        openPopup = popup;
+        popup.setOnDismissListener(() -> {
+            if (openPopup == popup) openPopup = null;
+        });
 
         // 1. Turn Off Now (Standby)
         addControlCenterRow(rows, popup, R.drawable.ic_lock, getString(R.string.cc_standby_title), getString(R.string.cc_standby_sub), () -> {
@@ -3399,6 +3504,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // 2. Free Up Memory (RAM)
         addControlCenterRow(rows, popup, R.drawable.ic_apps, getString(R.string.cc_memory_title), getFreeMemorySubtitle(), () -> {
             trimMemoryNow();
+            updateTaskManagerPill();
         });
 
         // 3. Storage Cleaner
