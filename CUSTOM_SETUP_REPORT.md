@@ -126,7 +126,7 @@ The core launcher repository provides an ultra-lightweight, zero-telemetry, priv
 ---
 
 ### G. One-Click TV Synchronization Tooling (`apply-my-tv.sh`)
-The repository includes an automated orchestration script [`apply-my-tv.sh`](file:///Users/kirolosesmat/Desktop/Projects/cleanyourtv/apply-my-tv.sh) that synchronizes the TV over Wi-Fi:
+The repository includes an automated orchestration script [`apply-my-tv.sh`](apply-my-tv.sh) that synchronizes the TV over Wi-Fi:
 - Connects to `192.168.1.126:5555`.
 - Applies safe package debloating from `my-debloat.txt`.
 - Verifies and sets `com.gathin.tvhome` as default Home.
@@ -135,6 +135,16 @@ The repository includes an automated orchestration script [`apply-my-tv.sh`](fil
 - Bounces and enables `HomeKeyService` safely without triggering crash states.
 - Ensures Private DNS is disabled for IPTV compatibility.
 - Brings CleanYourTV Home to the front.
+
+---
+
+### H. Blanket Ambient Sound Player Integration
+The open-source ambient sound and noise player Blanket ([rafaelmardojai/blanket](https://github.com/rafaelmardojai/blanket) / [vinberg88/blanketforandroid](https://github.com/vinberg88/blanketforandroid)) is installed as an offline standalone companion:
+- **Sounds Available**: Rain, Storm, Wind, Waves, Stream, Birds, Summer Night, Train, Boat, City, Coffee Shop, Fireplace, White Noise, Pink Noise.
+- **Background Audio**: Runs as a low-overhead foreground media playback service (`com.vinberg88.blanket`), continuing ambient audio seamlessly while browsing CleanYourTV, watching wallpapers, or running other apps.
+- **Home & Drawer Integration**: Placed directly on the CleanYourTV home grid (`dock_apps`), accessible from the top-bar App Library Drawer (`library_button`), and pre-seeded in `library_apps`.
+- **Zero Internet / Full Privacy**: Uses 0 network permissions (`INTERNET` absent), zero analytics, zero ads.
+- **Standalone Installer**: Documented and automated via [`tools/blanket/install.sh`](tools/blanket/install.sh).
 
 ---
 

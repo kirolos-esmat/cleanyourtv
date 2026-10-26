@@ -38,6 +38,7 @@
         <item>com.v2raytun.android</item>
         <item>com.android.vending</item>
         <item>com.mxtech.videoplayer.pro</item>
+        <item>com.vinberg88.blanket</item>
         <item>com.xiaomi.mitv.mediaexplorer</item>
         <item>com.mitv.gallery</item>
         <item>com.xiaomi.mitv.smartshare</item>
@@ -314,7 +315,7 @@
          of white for both. Can also be set with "wifi_status_warnings": true in a theme's config.json. -->
     <bool name="wifi_status_warnings">false</bool>
     <!-- The app library as a round button in the top bar, beside Settings (app_library must be on too). -->
-    <bool name="library_button">false</bool>
+    <bool name="library_button">true</bool>
     <!-- The App library pill after the last Home row. false hides it while library_button is on, so the top-bar
          button stays the way in, and Down from the last row stays put as with app_library off. Can also be set
          with "show_library_pill": false in a theme's config.json. -->
@@ -394,6 +395,7 @@
          (many China-market TVs, e.g. Coocaa 8R145), a fresh Home with app_library on would otherwise be
          nearly empty. Empty (off) by default, so existing setups change nothing. -->
     <string-array name="library_apps" translatable="false">
+        <item>com.vinberg88.blanket</item>
     </string-array>
 
     <!-- Module cards: an app that declares a card (docs/specs/card.md) can stand in for its tile with its own
