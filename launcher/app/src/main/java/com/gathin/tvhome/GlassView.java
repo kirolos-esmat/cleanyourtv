@@ -15,12 +15,10 @@ import android.view.View;
  */
 public class GlassView extends View {
 
-    public static final float INSET_DP = 8f;
+    public static final float INSET_DP = 6f;
 
-    private final Paint shadowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint specular = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint darkRim = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint rim = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint glow = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF rect = new RectF();
@@ -38,15 +36,6 @@ public class GlassView extends View {
         super(context, attrs);
         density = getResources().getDisplayMetrics().density;
         radius = 20f * density;
-
-        shadowPaint.setStyle(Paint.Style.FILL);
-
-        // Contrast-aware dual rim: a slightly wider, low-alpha dark outline behind the bright rim
-        // ensures the focus border is clearly defined and legible on pure white/light cards.
-        darkRim.setStyle(Paint.Style.STROKE);
-        darkRim.setStrokeWidth(2.5f * density);
-        darkRim.setColor(0x2E000000);
-
         rim.setStyle(Paint.Style.STROKE);
         rim.setStrokeWidth(1.5f * density);
         rim.setColor(0xCCFFFFFF);
@@ -96,58 +85,38 @@ public class GlassView extends View {
 
     @Override
     protected void onDraw(Canvas canvas) {
-        float inset = INSET_DP * density;   // room for the diffusion and downward shadow
+        float inset = INSET_DP * density;   // room for the glow
         rect.set(inset, inset, getWidth() - inset, getHeight() - inset);
 
+        // Outer glow: thin rings across the inset, each a little fainter, so it fades out smoothly. Three wide
+        // strokes left visible bands once the glow took an app's colour at a stronger alpha. The hardware layer
+        // caches the result, so the rings cost one draw, not one per frame of the spring.
         if (!flat || halo) {
+            int rings = 12;
+            float step = inset / rings;
             int alpha = flat ? glowAlpha / 2 : glowAlpha;
-            // Tight, smooth focus diffusion
-            float o1 = 1.0f * density;
-            glow.setStrokeWidth(2.0f * density);
-            glow.setColor((Math.round(alpha * 0.45f) << 24) | glowRgb);
-            canvas.drawRoundRect(rect.left - o1, rect.top - o1, rect.right + o1, rect.bottom + o1,
-                    radius + o1, radius + o1, glow);
-
-            float o2 = 2.5f * density;
-            glow.setStrokeWidth(2.5f * density);
-            glow.setColor((Math.round(alpha * 0.20f) << 24) | glowRgb);
-            canvas.drawRoundRect(rect.left - o2, rect.top - o2, rect.right + o2, rect.bottom + o2,
-                    radius + o2, radius + o2, glow);
-
-            float o3 = 4.5f * density;
-            glow.setStrokeWidth(3.0f * density);
-            glow.setColor((Math.round(alpha * 0.08f) << 24) | glowRgb);
-            canvas.drawRoundRect(rect.left - o3, rect.top - o3, rect.right + o3, rect.bottom + o3,
-                    radius + o3, radius + o3, glow);
+            glow.setStrokeWidth(step + 0.5f);
+            for (int i = 0; i < rings; i++) {
+                float o = step * (i + 0.5f);
+                float t = 1f - (float) i / rings;
+                glow.setColor(Math.round(alpha * t) << 24 | glowRgb);
+                canvas.drawRoundRect(rect.left - o, rect.top - o, rect.right + o, rect.bottom + o, radius + o, radius + o, glow);
+            }
         }
         if (flat) {
             canvas.drawRoundRect(rect, radius, radius, rim);
             return;
         }
 
-        // 1. Subtle downward grounding shadow (GPU-safe restrained low-alpha layers)
-        float dy1 = 2f * density, s1 = 1.5f * density;
-        shadowPaint.setColor(0x14000000);
-        canvas.drawRoundRect(rect.left - s1, rect.top - s1 + dy1, rect.right + s1, rect.bottom + s1 + dy1,
-                radius + s1, radius + s1, shadowPaint);
-
-        float dy2 = 3.5f * density, s2 = 2.5f * density;
-        shadowPaint.setColor(0x10000000);
-        canvas.drawRoundRect(rect.left - s2, rect.top - s2 + dy2, rect.right + s2, rect.bottom + s2 + dy2,
-                radius + s2, radius + s2, shadowPaint);
-
-        // 3. Translucent glass fill
         canvas.drawRoundRect(rect, radius, radius, fill);
 
-        // 4. Sheen across the top 45%: clipRect stays on the GPU (clipPath did not on the MT5895) and
+        // Sheen across the top 45%: clipRect stays on the GPU (clipPath did not on the MT5895) and
         // the round rect under it keeps the top corners rounded with a flat bottom edge.
         canvas.save();
         canvas.clipRect(rect.left, rect.top, rect.right, rect.top + rect.height() * 0.45f);
         canvas.drawRoundRect(rect, radius, radius, specular);
         canvas.restore();
 
-        // 5. Dual rim: dark contrast outline behind bright white/accent rim for visibility on white cards
-        canvas.drawRoundRect(rect, radius, radius, darkRim);
         canvas.drawRoundRect(rect, radius, radius, rim);
     }
 }

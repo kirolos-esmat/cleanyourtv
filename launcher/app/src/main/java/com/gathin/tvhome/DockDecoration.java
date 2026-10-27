@@ -148,12 +148,11 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
             float scale = adapter.focusScale();
             float deltaX = cardW * (scale - 1f) / 2f;
             float deltaY = cardH * (scale - 1f) / 2f;
-            float upwardShift = (advancedEffects && scale > 1f) ? 4f * density : 0f;
             float pad = 14f * density;
             radius = 26f * density;
             rect.left = (rect.left - deltaX) - pad;
             rect.right = (rect.right + deltaX) + pad;
-            rect.top = (rect.top - deltaY - upwardShift) - pad;
+            rect.top = (rect.top - deltaY) - pad;
             rect.bottom = (rect.bottom + deltaY) + pad;
         } else {
             float pad = 14 * density;
