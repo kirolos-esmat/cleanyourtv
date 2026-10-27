@@ -162,7 +162,10 @@ class CheckCommandLineTest(unittest.TestCase):
         result = self.run_check(str(self.base))
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn("could not read", result.stderr)
-        self.assertIn("Is a directory", result.stderr)
+        # POSIX refuses a directory outright ("Is a directory"); Windows reports the same refusal as
+        # a permission error, since opening a directory is not a read that can start there.
+        self.assertTrue("Is a directory" in result.stderr or "denied" in result.stderr.lower(),
+                        result.stderr)
         self.assertNotIn("Traceback", result.stderr)
         self.assertEqual(self.sent(), [])
 

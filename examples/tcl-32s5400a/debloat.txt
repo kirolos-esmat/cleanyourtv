@@ -100,10 +100,8 @@ com.yupptv.scope.tvapp
 # com.google.android.tv.assistant          # disable together with katniss
 # com.tcl.micmanager                       # remote microphone manager; together with katniss
 # com.google.android.tv.remote.service     # Google TV phone-app remote (casting does not need it)
-# com.tcl.ui_mediaCenter                   # USB media player, together with the next three
-# com.tcl.audioplayer
-# com.tcl.videoplayer
-# com.tcl.imageplayer
+# com.tcl.ui_mediaCenter                   # USB media player, together with com.tcl.videoplayer
+# com.tcl.videoplayer                      # (com.tcl.audioplayer and com.tcl.imageplayer are in the list above)
 # com.tcl.t_solo                           # T-Solo: TV sound on Bluetooth headphones only
 # com.google.android.backdrop              # photo screensaver; screensaver_components was already
 #                                          # com.android.dreams.basic/.Colors on this unit

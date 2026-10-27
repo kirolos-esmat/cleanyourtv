@@ -146,6 +146,27 @@ class ScreenshotTest(unittest.TestCase):
             self.assertNotIn("pull", [c[0] for c in device.calls])
             self.assertEqual(device.calls[-1], ("shell", f"rm -f {TV.SHOT_REMOTE}"))
 
+    def test_an_indented_rc_line_is_parsed_not_crashed(self):
+        # The match strips the status line (a CRLF firmware leaves a trailing "\r"), so the slice that
+        # reads the number has to strip it too: on a line that comes back indented, `line[3:]` reads
+        # "c=0" and int() raises before the capture is ever used. The strip keeps "rc=0" -> 0.
+        with tempfile.TemporaryDirectory() as tmp:
+            local = Path(tmp) / "home.png"
+            code, _, err, _ = self.run_tv(["--screenshot", str(local)], screencap_says="  rc=0\n")
+            self.assertEqual(code, 0, err)
+            self.assertEqual(local.read_bytes(), PNG)
+
+    def test_an_indented_failing_rc_is_read_as_the_failure_it_is(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            code, _, err, _ = self.run_tv(["--screenshot", str(Path(tmp) / "x.png")],
+                                          capture=b"", screencap_says="  rc=127\n")
+            self.assertEqual(code, 1)
+            self.assertIn("exit status 127", err)
+            # The status line is matched after stripping, so it is dropped from the error text the
+            # same way: an indented "rc=127" should not come back as the screencap output.
+            self.assertNotIn("rc=127", err)
+            self.assertIn("no output", err)
+
     def test_a_damaged_pull_is_not_passed_off_as_a_png(self):
         with tempfile.TemporaryDirectory() as tmp:
             code, _, err, _ = self.run_tv(["--screenshot", str(Path(tmp) / "home.png")], capture=b"garbage")

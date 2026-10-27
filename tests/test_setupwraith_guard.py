@@ -34,12 +34,16 @@ class SetupwraithGuardTest(unittest.TestCase):
                 '  *resolve-activity*) echo "com.google.android.tvlauncher/.MainActivity" ;;\n'
                 '  *query-activities*) echo "  com.google.android.tvlauncher/.MainActivity" ;;\n'
                 '  *getprop*) echo 1 ;;\n'
+                # The read-back after the batch (#1376) answers nothing, so CAPTURE keeps the batch.
+                '  *"pm list packages -e"*) ;;\n'
                 '  *) cat > "$CAPTURE" ;;\n'
                 'esac\n')
             client.chmod(0o755)
             (repo / "debloat.txt").write_text(LIST)
             capture = Path(tmp) / "commands.txt"
             env = dict(os.environ, CAPTURE=str(capture), **(extra_env or {}))
+            if os.name != "posix" or not shutil.which("bash"):
+                raise unittest.SkipTest("disable.sh is a POSIX script; it needs bash")
             # The fake tv.py reads its stdin, so an inherited terminal would leave it waiting.
             result = subprocess.run(["bash", str(tools / "disable.sh"), "debloat.txt"], cwd=repo,
                                     env=env, capture_output=True, text=True, stdin=subprocess.DEVNULL)

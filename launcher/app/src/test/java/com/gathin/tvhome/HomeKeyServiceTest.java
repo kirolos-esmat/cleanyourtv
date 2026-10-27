@@ -83,4 +83,9 @@ public class HomeKeyServiceTest {
         assertFalse(HomeKeyService.isAllowedLauncherxActivity(""));
         assertFalse(HomeKeyService.isAllowedLauncherxActivity(null));
     }
+
+    @Test public void alwaysGoesHomeAfterScreenOnUntilAKey() {
+        assertTrue(HomeKeyService.stillArmed(SOON, SOON + HomeKeyService.SCREEN_ON_WINDOW_MS));
+        assertFalse(HomeKeyService.stillArmed(SOON, 0));
+    }
 }
