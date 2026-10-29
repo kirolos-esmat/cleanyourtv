@@ -182,19 +182,24 @@ adb -s 192.168.1.126:5555 shell am start -n com.gathin.tvhome/.MainActivity
 
 ---
 
-## 8. Upstream v3.2.0 Upgrade Branch (`feature/v3.2-upgrade`)
+## 8. CleanYourTV v3.2.0 Upgrade & Live Status
 
-- **Branch**: `feature/v3.2-upgrade` (based on upstream `v3.2.0` / commit `42fe7b09`)
-- **Key Upstream 3.2.0 Features**:
-  1. **Seasonal Skin (Halloween)**: Animated Jack-o'-Lantern Wi-Fi icon (`JackOLanternDrawable`), bat/ghost top-bar icons (`SpookyIconDrawable`), fluttering bat flight animation on first Home click (`BatFlightView`), and `themes/halloween` + `addons/haunted`.
-  2. **Game Day Shelf Panel**: Live sports and F1 race countdown shelf (`GameDay.java`).
-  3. **Remote Key Improvements**: `ignore` keyword to swallow unwanted remote keys, `guide:<package>` for Live TV guide mapping, `package=view:uri` launch actions, Xiaomi China menu key support.
-  4. **App Library Exclusion**: `library_excluded_apps` to hide utility apps from `+` library dialog.
-  5. **Network-Aware Startup**: `open_on_start_network_wait` to wait for internet before opening apps at boot.
-  6. **VPN Badge**: `icon_only_vpn` circular lock button.
-- **Custom Merge Verification**:
-  - Merged cleanly with custom Weather, TaskManager, frosted glass dock, Arabic strings, and custom layouts.
-  - All mandatory invariants verified (`launcherx` hold-Home protected, screensaver intact, weather permissions granted).
-  - 100% test suite passing (all custom guard tests + upstream tests).
-  - Build validated: `./gradlew --no-daemon testReleaseUnitTest lintRelease assembleRelease` succeeds with 0 lint errors.
+- **Version**: CleanYourTV 3.2 (`versionCode 11`, `versionName '3.2'`), branch `main`
+- **Active v3.2.0 Features**:
+  1. **Seasonal Halloween Theme**:
+     - Top bar Wi-Fi pill features animated glowing Jack-o'-Lantern pumpkin (`JackOLanternDrawable`).
+     - Inputs pill features animated bat icon (`SpookyIconDrawable.BAT`).
+     - Settings pill features animated ghost icon (`SpookyIconDrawable.GHOST`).
+     - Personalized festive greeting: `"HAPPY HALLOWEEN, ENG. KIROLOS ESMAT"` with pumpkin glow.
+     - Focused tile glow: Warm pumpkin orange specular accent (`#FF7A1A`).
+     - Wallpapers: 8 high-res eerie Halloween night wallpapers rotated in background.
+  2. **Game Day Shelf Panel (FC Barcelona)**:
+     - Companion add-on `addons/game-day` (`io.github.justinnewman.gameday`) installed.
+     - Live calendar synced from official La Liga/Champions League .ics feed (`https://ics.fixtur.es/v2/fc-barcelona.ics`).
+     - Panel renders cleanly under the clock with Blaugrana team bar, matchup title, and live countdown (e.g., `FC BARCELONA - DEPORTIVO ALAVÉS` · `Starts in 2d 1h`).
+  3. **Preserved Invariants & Customisations**:
+     - All 26 custom guard tests pass.
+     - Hold-Home Google TV quick dashboard (`launcherx`) intact.
+     - Ambient screensaver and Cast services (`dreamx`, `mediashell`, `setupwraith`) intact.
+     - Zero `am force-stop` operations.
 
