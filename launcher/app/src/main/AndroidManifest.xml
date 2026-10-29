@@ -76,6 +76,9 @@
         <!-- Coocaa OS sources for the Inputs menu (coocaa_sources); see CoocaaSources. -->
         <provider android:authorities="com.skyworth.tv.provider" />
         <provider android:authorities="com.skyworth.tv.sdk.provider" />
+        <!-- Game Day add-on: fixture calendar provider -->
+        <package android:name="io.github.justinnewman.gameday" />
+        <provider android:authorities="io.github.justinnewman.gameday.games" />
     </queries>
 
     <application

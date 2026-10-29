@@ -377,7 +377,7 @@
 
     <!-- The Wi-Fi/Ethernet pill in the top bar. false hides it (on Android 14 with Location off it can
          only say "Wi-Fi", not the network name). Can also be set with "show_network_pill" in a theme. -->
-    <bool name="show_network_pill">false</bool>
+    <bool name="show_network_pill">true</bool>
     <!-- Apps shown as round buttons with their own logo in the top bar, left of the network pill, in this order.
          They leave the grid. Missing apps are skipped. Can also be set with "top_bar_apps" in a theme. -->
     <string-array name="top_bar_apps" translatable="false">
@@ -485,11 +485,16 @@
          "show_stats": true. Nothing is read, and the clock does not move, while this is false. -->
     <bool name="show_stats">false</bool>
 
+    <!-- Festive skin for holidays: halloween, diwali, dussehra. Leave empty for none. -->
+    <string name="seasonal_skin" translatable="false">halloween</string>
+    <string name="festival_until" translatable="false">2026-11-02</string>
+    <string name="accent_color" translatable="false">#FF7A1A</string>
+
     <!-- Each team's next game in the F1 panel's place under the clock, rotating with the theme's F1 weekend: the package
          of an add-on that publishes them (the Game Day add-on: io.github.justinnewman.gameday; contract in docs/modules.md).
          Empty = off: nothing is read or watched. The launcher only reads what the add-on publishes and never goes
          online. A theme can set "game_day". -->
-    <string name="game_day" translatable="false"></string>
+    <string name="game_day" translatable="false">io.github.justinnewman.gameday</string>
 
     <!-- Time-of-day backdrop behind everything: a dark gradient that follows the clock, with a warm
          horizon glow around sunrise and sunset. 0 keeps the plain background (the default); 1 to 100

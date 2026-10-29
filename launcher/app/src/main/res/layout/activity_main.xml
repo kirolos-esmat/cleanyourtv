@@ -39,7 +39,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="top|left"
         android:layout_marginStart="60dp"
-        android:layout_marginTop="158dp"
+        android:layout_marginTop="96dp"
         android:orientation="vertical"
         android:focusable="false"
         android:importantForAccessibility="no"
@@ -75,10 +75,10 @@
             android:id="@+id/raceHeadline"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="2dp"
             android:singleLine="true"
             android:textColor="#FFFFFFFF"
-            android:textSize="34sp"
+            android:textSize="16sp"
             android:fontFamily="@string/font_light"
             android:letterSpacing="-0.01"
             android:includeFontPadding="false" />
@@ -218,7 +218,7 @@
                     android:shadowRadius="4"
                     android:textSize="12sp"
                     android:fontFamily="@string/font_medium"
-                    android:letterSpacing="0.22"
+                    android:letterSpacing="0.10"
                     android:textAllCaps="true" />
 
                 <LinearLayout

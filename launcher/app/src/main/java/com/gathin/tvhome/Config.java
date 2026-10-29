@@ -717,10 +717,14 @@ final class Config {
             wallpaper = chosen.isEmpty() ? null : chosen.get(0);
             wallpaperEnabled = !chosen.isEmpty();
         }
-        // A festive skin comes only from a theme; config.xml has no festival. seasonal_skin names one the same way
-        // but launchers before it ignore the key, so a theme can carry it without older ones showing the diya skin.
-        Festival festival = json == null ? Festival.NONE : Festival.parse(festivalName(json),
-                string(json, "festival_until", ""), string(json, "greeting", ""), string(json, "accent_color", ""));
+        String xmlFestival = res.getString(R.string.seasonal_skin).trim();
+        String xmlUntil = res.getString(R.string.festival_until).trim();
+        String xmlAccent = res.getString(R.string.accent_color).trim();
+        String name = json != null && !festivalName(json).isEmpty() ? festivalName(json) : xmlFestival;
+        String until = json != null && !string(json, "festival_until", "").isEmpty() ? string(json, "festival_until", "") : xmlUntil;
+        String greeting = json != null ? string(json, "greeting", "") : "";
+        String accent = json != null && !string(json, "accent_color", "").isEmpty() ? string(json, "accent_color", "") : xmlAccent;
+        Festival festival = Festival.parse(name, until, greeting, accent);
 
         return new Config(dock, fillDock, hidden, extraInputApps, libraryApps, libraryExcludedApps, liveTv, liveTvAction, liveTvInputId, packageMap(launchActions), packageMap(appLabels),
                 packageMap(appBanners), panelService, panelAction, panelExtra, coocaaSources, inputAction, inputSources, inputUriScheme, Math.max(1, columns),

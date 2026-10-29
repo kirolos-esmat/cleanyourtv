@@ -2793,7 +2793,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         String targetText;
         int targetColor;
         if (!festiveGreeting.isEmpty()) {
-            targetText = festiveGreeting;
+            targetText = greetingName.isEmpty() ? festiveGreeting
+                    : getString(R.string.greeting_with_name, festiveGreeting, greetingName);
             targetColor = liftTowardsWhite(festival.accentColor(), 0.25f);
         } else {
             targetText = greetingName.isEmpty() ? getString(res)
@@ -3145,6 +3146,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             setFestiveIcon(inputs, bat);
             setFestiveIcon(btnWifi, pumpkin);
             setFestiveIcon(settings, ghost);
+            makeIconOnly(btnWifi);
             addFocusAction(inputs, bat::nudge);
             addFocusAction(settings, ghost::nudge);
             return;
