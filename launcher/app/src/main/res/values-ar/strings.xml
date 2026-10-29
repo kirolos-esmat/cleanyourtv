@@ -150,4 +150,5 @@
     <string name="task_all_clear">كل شيء جاهز</string>
     <string name="apps_closed_toast">تم إغلاق جميع التطبيقات</string>
     <string name="app_closed_toast">تم إغلاق %1$s</string>
+    <string name="game_live">مباشر الآن</string>
 </resources>

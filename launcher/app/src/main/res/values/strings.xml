@@ -19,6 +19,7 @@
     <string name="good_night">Good night</string>
     <string name="festival_dussehra_greeting">Happy Dussehra</string>
     <string name="festival_diwali_greeting">Happy Diwali</string>
+    <string name="festival_halloween_greeting">Happy Halloween</string>
     <string name="ethernet">Ethernet</string>
     <string name="offline">Offline</string>
     <string name="not_available">Not available on this TV</string>
@@ -206,4 +207,6 @@
     <string name="task_all_clear">All clear</string>
     <string name="apps_closed_toast">All apps closed</string>
     <string name="app_closed_toast">Closed %1$s</string>
+    <!-- game_day: a game on now, in the race panel. -->
+    <string name="game_live">Live now</string>
 </resources>

@@ -568,6 +568,7 @@ public class HomeKeyService extends AccessibilityService {
     public void onDestroy() {
         if (running == this) running = null;
         if (instance == this) instance = null;
+        RemoteKeys.release(this);
         stopWaitingForUnlock();
         if (screenOnReceiver != null) unregisterReceiver(screenOnReceiver);
         if (standbyExit != null) {
@@ -1068,6 +1069,7 @@ public class HomeKeyService extends AccessibilityService {
     public boolean onUnbind(Intent intent) {
         cancelForceStopQueue();
         stopWaitingForUnlock();
+        RemoteKeys.release(this);
         if (repairRecord && !steppingOut) ServiceRepair.disconnected(this, getClass());
         handler.removeCallbacksAndMessages(null);
         pendingDoubleTapKey = 0;

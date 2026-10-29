@@ -1,13 +1,16 @@
 """Renders the stat strip (docs/stats.png), the top part of the README card.
 
 Update STATS, then: python3 tools/readme_stats.py Fredoka.ttf docs/stats.png
-and rebuild the card with tools/readme_card.py. Fredoka is the variable TTF from Google Fonts, and its
+and rebuild the card with tools/readme_card.py.
+python3 tools/readme_stats.py --halloween Fredoka.ttf docs/stats-halloween.png draws the October strip for
+tools/readme_card.py --halloween: the same STATS in pumpkin orange, each digit 0 the 3D pumpkin of the
+spooky logo (docs/pumpkin-3d.png). Fredoka is the variable TTF from Google Fonts, and its
 file is not in this repo: download it and pass the path of the copy you saved.
 """
 import os
 import sys
 
-USAGE = ("usage: readme_stats.py <font.ttf> <out.png>\n"
+USAGE = ("usage: readme_stats.py [--halloween] <font.ttf> <out.png>\n"
          "  Fredoka, the variable TTF from Google Fonts, is not in this repo: download it and pass the\n"
          "  path of the file you saved.")
 
@@ -19,6 +22,7 @@ def font_and_out(argv):
     the first thing that fails here, and Pillow's `OSError: cannot open resource` names neither the file
     it wanted nor where to get it.
     """
+    argv = [a for a in argv if a != "--halloween"]
     if len(argv) != 3:
         sys.exit(USAGE)
     font, out = argv[1], argv[2]
@@ -50,6 +54,7 @@ def out_problem(path):
     return None
 
 
+HALLOWEEN = "--halloween" in sys.argv
 FONT, OUT = font_and_out(sys.argv)
 
 # The picture is the other argument the reader types, and Pillow only refuses it after the whole thing
@@ -67,7 +72,7 @@ try:
 except ImportError:
     sys.exit("readme_stats.py needs Pillow: tools/venv/bin/pip install -r tools/requirements-perf.txt")
 
-STATS = [("341", "TV MODELS"), ("93", "BRANDS"), ("29", "LANGUAGES"), ("532 KB", "LAUNCHER")]
+STATS = [("360", "TV MODELS"), ("97", "BRANDS"), ("30", "LANGUAGES"), ("561 KB", "LAUNCHER")]
 W, H = 1600, 240
 img = Image.new("RGB", (W, H), "#15181e"); d = ImageDraw.Draw(img)
 def f(size, wt):
@@ -85,11 +90,45 @@ def f(size, wt):
     return x
 f(12, 400)  # the font is the argument the reader brings, so a wrong one is named before any drawing
 num, lab = f(92, 600), f(30, 500)
+NUM_FILL = "#ff9a3c" if HALLOWEEN else "#cfffcf"
+PUMPKIN = None
+if HALLOWEEN:
+    if not os.path.isfile("docs/pumpkin-3d.png"):
+        sys.exit("cannot read docs/pumpkin-3d.png: the Halloween strip draws each 0 as that picture, so run "
+                 "this from the repository root. Nothing was written.")
+    PUMPKIN = Image.open("docs/pumpkin-3d.png").convert("RGBA")
+    PUMPKIN = PUMPKIN.crop(PUMPKIN.getbbox())
+
+
+def number(d, cx, n):
+    """`n` with each 0 drawn as the pumpkin: as tall as the digits, standing on their baseline."""
+    top, bottom = d.textbbox((0, 40), "3", font=num)[1::2]
+    h = bottom - top
+    pk = PUMPKIN.resize((round(PUMPKIN.width * h / PUMPKIN.height), h), Image.LANCZOS)
+    gap = 10
+    parts = n.split("0")
+    seq = []
+    for i, text in enumerate(parts):
+        if text:
+            seq.append(("t", text, d.textlength(text, font=num)))
+        if i < len(parts) - 1:
+            seq.append(("p", None, pk.width + gap))
+    x = cx - sum(w for _, _, w in seq) / 2
+    for kind, text, w in seq:
+        if kind == "t":
+            d.text((x, 40), text, font=num, fill=NUM_FILL)
+        else:
+            img.paste(pk, (round(x + gap / 2), bottom - h), pk)
+        x += w
+
 PAD = 70
 col = (W - 2 * PAD) / len(STATS)
 for i, (n, l) in enumerate(STATS):
     cx = PAD + col * i + col / 2
-    w = d.textlength(n, font=num); d.text((cx - w / 2, 40), n, font=num, fill="#cfffcf")
+    if HALLOWEEN and "0" in n:
+        number(d, cx, n)
+    else:
+        w = d.textlength(n, font=num); d.text((cx - w / 2, 40), n, font=num, fill=NUM_FILL)
     sp = 5; w = sum(d.textlength(c, font=lab) for c in l) + sp * (len(l) - 1); x = cx - w / 2
     for c in l: d.text((x, 160), c, font=lab, fill="#aab3bd"); x += d.textlength(c, font=lab) + sp
     if i: d.line([(PAD + col * i, 56), (PAD + col * i, H - 56)], fill="#2c313a", width=3)
