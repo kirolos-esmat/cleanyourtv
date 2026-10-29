@@ -136,6 +136,23 @@ TV_HOST=192.168.1.126 addons/game-day/setup.sh
 adb -s 192.168.1.126:5555 exec-out screencap -p > verification.png
 ```
 
+### Wi-Fi Auto-Join Network Management
+On Xiaomi Mi Box S (Android 11), Android's `WifiConnectivityManager` evaluates all saved networks with `allowAutojoin=true`. To enforce connecting **only** to the primary active Wi-Fi network without auto-switching to or roaming among secondary saved networks, `allowAutojoin` is managed via Binder transaction 20 on `android.net.wifi.IWifiManager`:
+
+- Disable auto-join for a saved network ID (without deleting the saved password):
+  ```bash
+  adb -s 192.168.1.126:5555 shell service call wifi 20 i32 <networkId> i32 0
+  ```
+- Enable auto-join for a network ID:
+  ```bash
+  adb -s 192.168.1.126:5555 shell service call wifi 20 i32 <networkId> i32 1
+  ```
+- Verify status across all networks:
+  ```bash
+  adb -s 192.168.1.126:5555 shell dumpsys wifi | grep -E "ID: [0-9]|allowAutojoin="
+  ```
+- Changes are automatically committed permanently to `/data/misc/apexdata/com.android.wifi/WifiConfigStore.xml` via `WifiConfigManager.saveToStore(true)` and persist across reboots.
+
 ### Run All Automated Tests
 ```bash
 # Python test suite
