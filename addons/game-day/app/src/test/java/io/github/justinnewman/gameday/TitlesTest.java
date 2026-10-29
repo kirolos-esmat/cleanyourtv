@@ -27,6 +27,17 @@ public class TitlesTest {
         assertArrayEquals(new String[] {"Portland Thorns", "Utah Royals"}, Titles.matchup("Utah Royals VS Portland Thorns"));
     }
 
+    @Test public void dashSeparators() {
+        assertEquals("FC Barcelona vs Deportivo Alavés", Titles.topLine("FC Barcelona - Deportivo Alavés", "FC Barcelona"));
+        assertEquals("Racing de Santander vs FC Barcelona", Titles.topLine("Racing de Santander - FC Barcelona", "FC Barcelona"));
+        assertEquals("FC Barcelona vs Deportivo Alavés - LaLiga", Titles.topLine("FC Barcelona - Deportivo Alavés - LaLiga", "FC Barcelona"));
+        assertEquals("Ibiza vs FC Barcelona [Copa] (1-2)", Titles.topLine("Ibiza - FC Barcelona [Copa] (1-2)", "FC Barcelona"));
+        assertArrayEquals(new String[] {"Deportivo Alavés", "FC Barcelona"}, Titles.matchup("FC Barcelona - Deportivo Alavés"));
+        Sport soccer = Sport.byLabel("Soccer");
+        assertEquals("Kickoff", Titles.word(soccer, "FC Barcelona - Deportivo Alavés"));
+        assertEquals("Kickoff", Titles.word(soccer, "Racing de Santander - FC Barcelona"));
+    }
+
     @Test public void decoratedTitles() {
         assertEquals("Minnesota Wild at Dallas Stars (Preseason)", Titles.topLine("🏒 Minnesota Wild @ Dallas Stars (Preseason)", "NHL"));
         assertEquals("Portland Thorns at Utah Royals - NWSL", Titles.topLine("Utah Royals vs. Portland Thorns - NWSL", "x"));
