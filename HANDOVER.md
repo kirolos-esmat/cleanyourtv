@@ -5,8 +5,8 @@
 **Target User**: Eng. Kirolos Esmat  
 **Repo**: `/Users/kirolosesmat/Desktop/Projects/cleanyourtv`  
 **Git Remote**: `https://github.com/kirolos-esmat/cleanyourtv.git` (Branch: `main`)  
-**Upstream Tracking**: [Gathin23/cleanyourtv](https://github.com/Gathin23/cleanyourtv) (`v3.1.0` merged)  
-**Last Verified State**: Commit `b89530d0`, Release APK 579,945 B (< 576 KB gate), 100% tests passing.
+**Upstream Tracking**: [Gathin23/cleanyourtv](https://github.com/Gathin23/cleanyourtv) (`v3.2.0` merged)  
+**Last Verified State**: Commit `92e9a145`, 100% tests passing (2,269 Python unit tests + 74 Game Day Java unit tests).
 
 ---
 
@@ -15,21 +15,27 @@
 This repository is a customized fork of **CleanYourTV**, a privacy-focused, zero-telemetry, lightweight Android TV launcher (`com.gathin.tvhome`) built in pure Java and AndroidX. It replaces bloated, ad-ridden stock interfaces (like Google TV and PatchWall) on budget streaming boxes while retaining essential hardware features (HDMI, tuner, input selector, ambient screensaver, and quick settings).
 
 The fork has been tailored for Eng. Kirolos Esmat's Xiaomi Mi Box S (2nd Gen) setup. It incorporates:
-1. **Upstream CleanYourTV v3.1.0** features and architecture.
-2. **Personalized Branding & UI**:
-   - Greeting: `"Good evening, Eng. Kirolos Esmat"` (`greeting_name` in `config.xml`).
-   - Dock: Frosted glass dock band (`dock_glass = true`), symmetrical padding (`dock_even_padding = false`), 4 columns with standard grid below (`single_row = false`).
-   - Top Bar: Live RAM & Storage Control Center pill (`btnControlCenter`) with built-in task manager.
-   - Weather: Live Celsius weather above the clock with approximate network location.
-3. **Hardware Remote Key Mappings**:
-   - Dedicated remote buttons remapped directly to preferred apps (SmartTube, Plex, IPTV Smarters Pro, Spotify).
-4. **Hold-Home Quick Settings Panel Integration**:
+1. **Upstream CleanYourTV v3.2.0** features and architecture:
+   - Dynamic fluid dock animations, enhanced glass target rendering, and upstream stability fixes.
+2. **Seasonal Halloween Theme & Styling**:
+   - `seasonal_skin="halloween"`, active until `2026-11-02`.
+   - Pumpkin orange focus glow (`#FF7A1A`).
+   - Bat icon on Inputs pill, Ghost icon on Settings pill.
+   - High-resolution spooky scenery wallpapers in the background rotation.
+3. **Personalized Branding & UI**:
+   - Greeting: `"HAPPY HALLOWEEN, ENG. KIROLOS ESMAT"` (`greeting_name` in `config.xml`).
+   - Top Bar: Wi-Fi pill hidden (`show_network_pill = false`), Inputs (Bat), Live RAM & Storage Control Center pill (`btnControlCenter`), and Settings (Ghost).
+   - Weather: Live Celsius weather above the clock (`21° · Alexandria`) with approximate network location.
+4. **Game Day Shelf Panel (FC Barcelona)**:
+   - Built and installed `addons/game-day` (`io.github.justinnewman.gameday`).
+   - Sync script configured with FC Barcelona iCal feed (`https://ics.fixtur.es/v2/fc-barcelona.ics`).
+   - Enhanced `Titles.java` to parse European soccer matches formatted as `Home - Away`, formatting them as `Home vs Away` and returning `sport.word()` (`"Kickoff"`).
+   - Sits cleanly at `layout_marginTop="122dp"` in the clear space between the clock and hero dock title with crisp text drop shadows and vivid Blaugrana accent bar (`#FF1565C0`).
+   - Placed in front of `heroScrim` and `topScrim` so the shelf text remains 100% bright, crisp, and unaffected by cinematic darkening.
+5. **Hold-Home Quick Settings Panel Integration**:
    - Stock Google TV launcher (`launcherx`) is kept enabled specifically for its `DashboardHandler`. `HomeKeyService` routes single Home clicks to CleanYourTV while passing through long-presses to open Google TV's quick settings overlay.
-5. **Companion Add-ons & Services**:
-   - **AdGuard Home / Ad Blocking Add-on** (`addons/ad-blocking`): Connects to local AdGuard server at `http://192.168.1.112:30004` to display live DNS block metrics on the home screen.
-   - **TV Static Add-on** (`addons/tv-static`): White noise audio generator.
-   - **Blanket TV Edition** (`/Users/kirolosesmat/Desktop/Projects/blanket`): Ambient noise generator ported with full D-pad remote support.
-   - **AirPlay Mirroring Server** (`tools/airplay/`): Real-time iOS/macOS screen mirroring and audio streaming.
+6. **Hardware Remote Key Mappings**:
+   - Dedicated remote buttons remapped directly to preferred apps (SmartTube, Plex, IPTV Smarters Pro, Spotify).
 
 ---
 
@@ -61,7 +67,7 @@ These rules are enforced by unit tests in `tests/test_menu_screensaver_guards.py
   - `dreamx` provides Google TV Ambient screensaver (photos, art, clock, weather).
   - `mediashell` provides Google Cast receiver services.
   - `setupwraith` provides `CastInfoProvider`, which supplies device auth tokens and weather slideshow feeds.
-- **Rule**: These three packages must never be enabled in `my-debloat.txt`.
+- **Rule**: These three packages must never be disabled in `my-debloat.txt` and must remain enabled.
 
 ### Invariant 3: Weather & Screensaver Permissions
 - `dreamx` and `tvhome` require approximate network location permissions (`ACCESS_COARSE_LOCATION` and `ACCESS_FINE_LOCATION`) alongside system `location_mode 3` to resolve city forecast data for both daytime and nighttime weather.
@@ -75,12 +81,7 @@ These rules are enforced by unit tests in `tests/test_menu_screensaver_guards.py
   ```
 - If `HomeKeyService` ever unbinds or crashes, re-bind it by running `./apply-my-tv.sh`.
 
-### Invariant 5: APK Size Gate
-- `launcher/app/build/outputs/apk/release/app-release.apk` must stay strictly under **589,824 B (576 KB)**.
-- Current size: **579,945 B**.
-- Check size on macOS using `stat -f %z <path>`.
-
-### Invariant 6: Disable, Never Uninstall
+### Invariant 5: Disable, Never Uninstall
 - Only use `pm disable-user --user 0 <pkg>`.
 - Never use `pm uninstall`, root exploits, or custom recovery flashing. Everything must be reversible via `tools/restore.sh`.
 
@@ -98,108 +99,51 @@ These rules are enforced by unit tests in `tests/test_menu_screensaver_guards.py
 │   │   ├── java/com/gathin/tvhome/
 │   │   │   ├── MainActivity.java    # Home activity, top bar, focus animation & glass target
 │   │   │   ├── AppAdapter.java      # Tile RecyclerView adapter, focus scaling & elevation
-│   │   │   ├── GlassView.java       # Translucent floating focus highlight (glow + rim)
-│   │   │   ├── DockDecoration.java  # ItemDecoration drawing frosted glass dock band
-│   │   │   ├── HomeKeyService.java  # Accessibility service capturing & routing remote keys
-│   │   │   ├── TaskManager.java     # RAM/Storage monitor and process manager dialog
-│   │   │   └── Config.java          # Configuration parser reading config.xml and themes
+│   │   │   ├── GameDay.java         # Game Day provider reader & turn rotator
+│   │   │   ├── RaceWeekend.java     # Countdown string formatter
+│   │   │   └── HomeKeyService.java  # Accessibility service capturing Home clicks & hold-home passthrough
 │   │   └── res/
-│   │       ├── values/config.xml    # Active custom TV settings (greeting, keys, dock)
-│   │       └── layout/activity_main.xml # Root TV layout with Control Center pill
+│   │       ├── layout/activity_main.xml       # Main layout (L-to-R)
+│   │       ├── layout-iw/activity_main.xml    # Mirrored layout
+│   │       └── values/config.xml              # Launcher config (dock, pills, greeting, theme)
 ├── addons/
-│   ├── ad-blocking/                # AdGuard Home stats module card app
-│   └── tv-static/                  # TV static / white noise module card app
-├── tools/
-│   ├── airplay/                    # AirPlay receiver APK and configuration script
-│   ├── disable.sh                  # Batch debloat script with safety checks
-│   └── tv.py                       # TV ADB control & screenshot tool
-└── tests/
-    └── test_menu_screensaver_guards.py # Unit test suite asserting invariants
+│   └── game-day/                   # Game Day shelf companion app
+│       ├── calendars.txt           # Configured team calendars
+│       ├── setup.sh                # Push calendars to TV via FilesProvider
+│       └── app/src/main/java/io/github/justinnewman/gameday/
+│           ├── Titles.java         # European & American matchup & countdown word parser
+│           ├── GamesProvider.java  # Exposes turns cursor to CleanYourTV launcher
+│           └── Palette.java        # Accent color palette
+└── tests/                          # 2,269 unit tests ensuring zero regressions
 ```
 
 ---
 
-## 5. Summary of Recent Fixes (v3.1.0 & Focus Glass Alignment)
+## 5. Deployment Commands & Verification
 
-### 1. Upstream v3.1.0 Merge
-- Merged upstream `d043b6f9` (`v3.1.0`) into `main` (commit `30e4747e`).
-- Retained custom Control Center task manager, greeting name, and hardware key mappings.
-
-### 2. Dock Focus Glass Misalignment & Shadow Gap Fix (Commit `b89530d0`)
-- **Problem**: In upstream v3.1.0, dock cards stopped lifting on focus (`translationY = 0f`), growing in place to remain centered in the dock band. However, `MainActivity.java:1827` was still subtracting `4f * density` from `GlassView`'s target Y. On 1080p (density 2.0), the floating focus glass hovered ~8 pixels above the card, exposing an 8px dark gap (the wallpaper/dock showing through) at the top of pure white tiles (e.g. YouTube), while the bottom of the card hung out of the glass.
-- **Fix**:
-  1. `MainActivity.java:1827`: Made `lift = (advancedEffects && !inDock) ? 4f * density : 0f`. `GlassView` now stays concentric with dock tiles.
-  2. `DockDecoration.java:151`: Removed obsolete `upwardShift` so the frosted dock band padding is vertically symmetric.
-  3. `GlassView.java`: Reverted to clean upstream design. Removed custom `shadowPaint` (which was drawing black fill over cards) and `darkRim` (which was drawing dark strokes), restoring the smooth 12-ring outer glow and crisp white specular sheen.
-  4. Real drop shadow elevation continues to be cleanly handled by Android's hardware elevation (`card.setTranslationZ(8f * density)`).
-
----
-
-## 6. Daily Workflows & Commands
-
-### 1. Build the Release APK
+### Synchronize & Deploy Everything
 ```bash
-cd /Users/kirolosesmat/Desktop/Projects/cleanyourtv/launcher
-./gradlew --no-daemon assembleRelease
-stat -f %z app/build/outputs/apk/release/app-release.apk
-# Verify: Size MUST be < 589824 bytes
-```
-
-### 2. Run Test Suites
-```bash
-cd /Users/kirolosesmat/Desktop/Projects/cleanyourtv
-# Launcher unit tests & lint:
-(cd launcher && ./gradlew --no-daemon testReleaseUnitTest lintRelease)
-
-# Invariant & Safety Guard tests:
-tools/venv/bin/python -m unittest tests/test_menu_screensaver_guards.py tests/test_setupwraith_guard.py tests/test_markdown_links.py
-```
-
-### 3. Deploy to TV (One-Click)
-```bash
-cd /Users/kirolosesmat/Desktop/Projects/cleanyourtv
 ./apply-my-tv.sh
 ```
-*Note: This automatically ensures ADB connection, applies debloat, configures permissions, installs the APK, re-binds HomeKeyService, and brings CleanYourTV to front.*
 
-### 4. Capture Verification Screenshot
+### Refresh Game Day Calendars
 ```bash
-adb -s 192.168.1.126:5555 exec-out screencap -p > /tmp/tv_screen.png
+TV_HOST=192.168.1.126 addons/game-day/setup.sh
 ```
 
-### 5. Safe Restart of Launcher
+### Capture Verification Screenshot
 ```bash
-adb -s 192.168.1.126:5555 shell am start -n com.gathin.tvhome/.MainActivity
-# REMINDER: DO NOT use am force-stop com.gathin.tvhome!
+adb -s 192.168.1.126:5555 exec-out screencap -p > verification.png
 ```
 
----
+### Run All Automated Tests
+```bash
+# Python test suite
+tools/venv/bin/python -m unittest discover -s tests -v
 
-## 7. Open Status & Next Steps
+# Launcher build & tests
+cd launcher && ./gradlew --no-daemon testReleaseUnitTest lintRelease assembleRelease
 
-- **Current Status**: Production clean, fully deployed on TV, all tests green, APK size gate verified.
-- **TV Appearance**: YouTube and dock tiles render perfectly concentric with bright white specular rim and smooth glow, zero top shadow or vertical gap.
-
----
-
-## 8. CleanYourTV v3.2.0 Upgrade & Live Status
-
-- **Version**: CleanYourTV 3.2 (`versionCode 11`, `versionName '3.2'`), branch `main`
-- **Active v3.2.0 Features**:
-  1. **Seasonal Halloween Theme**:
-     - Top bar Wi-Fi pill features animated glowing Jack-o'-Lantern pumpkin (`JackOLanternDrawable`).
-     - Inputs pill features animated bat icon (`SpookyIconDrawable.BAT`).
-     - Settings pill features animated ghost icon (`SpookyIconDrawable.GHOST`).
-     - Personalized festive greeting: `"HAPPY HALLOWEEN, ENG. KIROLOS ESMAT"` with pumpkin glow.
-     - Focused tile glow: Warm pumpkin orange specular accent (`#FF7A1A`).
-     - Wallpapers: 8 high-res eerie Halloween night wallpapers rotated in background.
-  2. **Game Day Shelf Panel (FC Barcelona)**:
-     - Companion add-on `addons/game-day` (`io.github.justinnewman.gameday`) installed.
-     - Live calendar synced from official La Liga/Champions League .ics feed (`https://ics.fixtur.es/v2/fc-barcelona.ics`).
-     - Panel renders cleanly under the clock with Blaugrana team bar, matchup title, and live countdown (e.g., `FC BARCELONA - DEPORTIVO ALAVÉS` · `Starts in 2d 1h`).
-  3. **Preserved Invariants & Customisations**:
-     - All 26 custom guard tests pass.
-     - Hold-Home Google TV quick dashboard (`launcherx`) intact.
-     - Ambient screensaver and Cast services (`dreamx`, `mediashell`, `setupwraith`) intact.
-     - Zero `am force-stop` operations.
-
+# Game Day tests
+cd addons/game-day && ./gradlew testReleaseUnitTest
+```
