@@ -179,6 +179,22 @@ adb -s 192.168.1.126:5555 shell am start -n com.gathin.tvhome/.MainActivity
 
 - **Current Status**: Production clean, fully deployed on TV, all tests green, APK size gate verified.
 - **TV Appearance**: YouTube and dock tiles render perfectly concentric with bright white specular rim and smooth glow, zero top shadow or vertical gap.
-- **Future Tasks (if requested by user)**:
-  - Any future upstream CleanYourTV updates can be rebased/merged cleanly using `git merge upstream/main`.
-  - Additional remote key remappings can be added in `launcher/app/src/main/res/values/config.xml` under `<string-array name="app_keys">`.
+
+---
+
+## 8. Upstream v3.2.0 Upgrade Branch (`feature/v3.2-upgrade`)
+
+- **Branch**: `feature/v3.2-upgrade` (based on upstream `v3.2.0` / commit `42fe7b09`)
+- **Key Upstream 3.2.0 Features**:
+  1. **Seasonal Skin (Halloween)**: Animated Jack-o'-Lantern Wi-Fi icon (`JackOLanternDrawable`), bat/ghost top-bar icons (`SpookyIconDrawable`), fluttering bat flight animation on first Home click (`BatFlightView`), and `themes/halloween` + `addons/haunted`.
+  2. **Game Day Shelf Panel**: Live sports and F1 race countdown shelf (`GameDay.java`).
+  3. **Remote Key Improvements**: `ignore` keyword to swallow unwanted remote keys, `guide:<package>` for Live TV guide mapping, `package=view:uri` launch actions, Xiaomi China menu key support.
+  4. **App Library Exclusion**: `library_excluded_apps` to hide utility apps from `+` library dialog.
+  5. **Network-Aware Startup**: `open_on_start_network_wait` to wait for internet before opening apps at boot.
+  6. **VPN Badge**: `icon_only_vpn` circular lock button.
+- **Custom Merge Verification**:
+  - Merged cleanly with custom Weather, TaskManager, frosted glass dock, Arabic strings, and custom layouts.
+  - All mandatory invariants verified (`launcherx` hold-Home protected, screensaver intact, weather permissions granted).
+  - 100% test suite passing (all custom guard tests + upstream tests).
+  - Build validated: `./gradlew --no-daemon testReleaseUnitTest lintRelease assembleRelease` succeeds with 0 lint errors.
+
