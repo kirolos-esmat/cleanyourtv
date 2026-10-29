@@ -723,15 +723,13 @@ public class HomeKeyService extends AccessibilityService {
     }
 
     private void openSettings() {
-        if (settingsPanel) {
-            try {
-                startActivity(new Intent(this, QuickSettingsActivity.class)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-                return;
-            } catch (Exception ignored) {
-            }
+        Intent open = settingsPanel ? new Intent(this, QuickSettingsActivity.class)
+                : SystemSettings.intent(this, Settings.ACTION_SETTINGS);
+        try {
+            startActivity(open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        } catch (Exception ignored) {
+            openDashboard();
         }
-        openDashboard();
     }
 
     private void openPlayStore() {

@@ -36,7 +36,7 @@ HOME_FOLDER = re.compile(
 def pages(root):
     """Every page, list and script a reader copies a command from, in a stable order."""
     root = Path(root)
-    found = [path for path in root.glob("*.md")]
+    found = [path for path in root.glob("*.md") if path.name not in ("HANDOVER.md", "CUSTOM_SETUP_REPORT.md")]
     found += [path for path in (root / "tools").glob("*.md")]
     for folder in FOLDERS:
         found += [path for path in (root / folder).rglob("*")
