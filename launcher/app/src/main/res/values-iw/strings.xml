@@ -203,4 +203,7 @@
     <string name="apps_closed_toast">כל האפליקציות נסגרו</string>
     <string name="app_closed_toast">נסגר %1$s</string>
     <string name="game_live">בשידור חי עכשיו</string>
+    <string name="clock_format_system">מערכת</string>
+    <string name="clock_format_12">12 שעות</string>
+    <string name="clock_format_24">24 שעות</string>
 </resources>

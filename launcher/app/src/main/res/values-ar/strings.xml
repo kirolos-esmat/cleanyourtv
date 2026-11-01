@@ -151,4 +151,7 @@
     <string name="apps_closed_toast">تم إغلاق جميع التطبيقات</string>
     <string name="app_closed_toast">تم إغلاق %1$s</string>
     <string name="game_live">مباشر الآن</string>
+    <string name="clock_format_system">النظام</string>
+    <string name="clock_format_12">12 ساعة</string>
+    <string name="clock_format_24">24 ساعة</string>
 </resources>

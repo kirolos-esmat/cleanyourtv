@@ -6,7 +6,7 @@ python3 tools/readme_card.py Fredoka.ttf docs/card.jpg
 python3 tools/readme_card.py --halloween Fredoka.ttf docs/card-halloween.jpg   # the October variant
 The Halloween variant keeps the layout and the generated numbers: it shows docs/stats-halloween.png
 (python3 tools/readme_stats.py --halloween Fredoka.ttf docs/stats-halloween.png: the same numbers in pumpkin
-orange, each 0 a pumpkin), recolours the headings to orange, adds a thin dripping stripe and a few bats, and
+orange), recolours the headings to orange, adds a thin dripping stripe and a few bats, and
 shows docs/new-home-halloween.jpg as AFTER. docs/card.jpg is not touched, so the README goes back with one line.
 Fredoka is the variable TTF from Google Fonts, and its file is not in this repo: pass the path of the
 copy you downloaded. The four pictures it stacks are this checkout's own - docs/stock-home.jpg,
@@ -222,7 +222,7 @@ def decorate(card):
 stats, featured = load("docs/stats-halloween.png" if HALLOWEEN else "docs/stats.png"), load("docs/featured.png")
 if HALLOWEEN:
     heading(featured, (650, 50, 950, 85))     # "FEATURED IN"
-    tint(featured, (1090, 315, 1135, 352))    # the arrow after "314 articles"
+    tint(featured, (1090, 315, 1135, 352))    # the arrow after "412 articles"
 parts = [stats, featured, tv]
 SEP = 24  # extra air on each side of a divider
 H = sum(p.height for p in parts) + 2 * SEP * (len(parts) - 1)
