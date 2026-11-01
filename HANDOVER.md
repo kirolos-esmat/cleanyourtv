@@ -5,8 +5,8 @@
 **Target User**: Eng. Kirolos Esmat  
 **Repo**: `/Users/kirolosesmat/Desktop/Projects/cleanyourtv`  
 **Git Remote**: `https://github.com/kirolos-esmat/cleanyourtv.git` (Branch: `main`)  
-**Upstream Tracking**: [Gathin23/cleanyourtv](https://github.com/Gathin23/cleanyourtv) (`v3.2.0` merged)  
-**Last Verified State**: Commit `92e9a145`, 100% tests passing (2,269 Python unit tests + 74 Game Day Java unit tests).
+**Upstream Tracking**: [Gathin23/cleanyourtv](https://github.com/Gathin23/cleanyourtv) (`v3.3.0` merged)  
+**Last Verified State**: Commit `2e85a473`, 100% tests passing (2,761 Python unit tests + Launcher & Game Day Java unit tests).
 
 ---
 
@@ -15,7 +15,9 @@
 This repository is a customized fork of **CleanYourTV**, a privacy-focused, zero-telemetry, lightweight Android TV launcher (`com.gathin.tvhome`) built in pure Java and AndroidX. It replaces bloated, ad-ridden stock interfaces (like Google TV and PatchWall) on budget streaming boxes while retaining essential hardware features (HDMI, tuner, input selector, ambient screensaver, and quick settings).
 
 The fork has been tailored for Eng. Kirolos Esmat's Xiaomi Mi Box S (2nd Gen) setup. It incorporates:
-1. **Upstream CleanYourTV v3.2.0** features and architecture:
+1. **Upstream CleanYourTV v3.3.0** (`versionCode 12`, `versionName "3.3"`) features and architecture:
+   - Hold-OK tile menu enabled by default (`tile_menu = true`) to Move apps, Remove from Home, or open App info directly from any tile.
+   - Configurable clock format (`clock_format`: `system`, `12`, `24`) in Launcher Settings, `back_opens_clock`, `glow_snap`, `open_on_start_on_wake`, and refitted cold-start glass focus target.
    - Dynamic fluid dock animations, enhanced glass target rendering, and upstream stability fixes.
 2. **Seasonal Halloween Theme & Styling**:
    - `seasonal_skin="halloween"`, active until `2026-11-02`.
