@@ -6,7 +6,7 @@
 **Repo**: `/Users/kirolosesmat/Desktop/Projects/cleanyourtv`  
 **Git Remote**: `https://github.com/kirolos-esmat/cleanyourtv.git` (Branch: `main`)  
 **Upstream Tracking**: [Gathin23/cleanyourtv](https://github.com/Gathin23/cleanyourtv) (`v3.4.0` merged)  
-**Last Verified State**: Commit `b6e3c23c`, 100% tests passing (2,761+ Python unit tests + Launcher & Game Day Java unit tests).
+**Last Verified State**: Commit `fc271cb8`, 100% tests passing (Python unit tests + Launcher & Game Day Java unit tests).
 
 ---
 
@@ -168,3 +168,15 @@ cd launcher && ./gradlew --no-daemon testReleaseUnitTest lintRelease assembleRel
 # Game Day tests
 cd addons/game-day && ./gradlew testReleaseUnitTest
 ```
+
+---
+
+## 9. NASA ISS Space Wallpapers Pack & Date Auto-Sizing
+
+- **NASA ISS Space Wallpapers Pack**:
+  - All 10 high-resolution NASA astronaut orbital photographs are bundled into a single unified pack (`NASA ISS Space (10 ISS Orbital Wallpapers)`) within `LauncherSettingsActivity`.
+  - Selecting the pack automatically rotates across all 10 space wallpapers every 15 minutes (`wallpaper_rotation_minutes=15`, order `shuffle`) and renders live mission captions under the top bar (e.g. `The Nile from Luxor to Cairo at night · NASA, Expedition 73`).
+  - Eliminates individual wallpaper clutter from the wallpaper picker grid.
+- **Date Display Auto-Sizing**:
+  - Implemented Android framework uniform text auto-sizing (`android:autoSizeTextType="uniform"`, min `10sp`, max `13sp`, step `0.5sp`, `letterSpacing="0.02"`).
+  - Eliminates date ellipsis truncation (`...`) across all months and days of the year (e.g. `THURSDAY 29 OCTOBER`, `WEDNESDAY 30 SEPTEMBER`).
