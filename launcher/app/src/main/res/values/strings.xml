@@ -178,6 +178,8 @@
     <string name="wp_retro_title">Retro Technology</string>
     <string name="wp_hogwarts_title">Harry Potter &amp; Hogwarts</string>
     <string name="wp_minimal_title">Minimalist</string>
+    <string name="wp_nasa_title">NASA ISS Space</string>
+    <string name="wp_nasa_sub">%1$d ISS Orbital Wallpapers</string>
     <string name="wp_curated_count">%1$d Curated Photos</string>
     <string name="wp_local_scene">Local / Scene</string>
     <string name="wp_solid_dark">Solid Dark</string>

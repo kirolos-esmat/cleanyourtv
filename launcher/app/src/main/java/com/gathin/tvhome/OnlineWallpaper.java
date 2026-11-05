@@ -35,6 +35,7 @@ final class OnlineWallpaper {
     static final String CHOICE_RETRO = "online:retro";
     static final String CHOICE_HOGWARTS = "online:hogwarts";
     static final String CHOICE_MINIMAL = "online:minimal";
+    static final String CHOICE_LOCAL_PACK = "pack:nasa_iss";
 
     private static final String PREF_NAME = "tvhome_online_wp";
     private static final long MAX_WALLPAPER_BYTES = 15 * 1024 * 1024L; // 15 MB max
@@ -133,6 +134,7 @@ final class OnlineWallpaper {
         if (CHOICE_RETRO.equals(choice)) return ctx.getString(R.string.wp_retro_title);
         if (CHOICE_HOGWARTS.equals(choice)) return ctx.getString(R.string.wp_hogwarts_title);
         if (CHOICE_MINIMAL.equals(choice)) return ctx.getString(R.string.wp_minimal_title);
+        if (CHOICE_LOCAL_PACK.equals(choice)) return ctx.getString(R.string.wp_nasa_title);
         return ctx.getString(R.string.wp_internet_generic);
     }
 

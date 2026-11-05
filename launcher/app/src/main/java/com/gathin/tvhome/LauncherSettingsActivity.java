@@ -299,14 +299,29 @@ public final class LauncherSettingsActivity extends Activity {
                 OnlineWallpaper.URL_MINIMAL
         ));
 
-        // 4. Local theme wallpapers / scenes
+        // 4. Local wallpapers collection: bundled into ONE pack so all rotate together
         File dir = Config.dir(this);
         List<File> images = new java.util.ArrayList<>(WallpaperRotation.images(
                 dir == null ? null : new File(dir, "wallpapers")));
         File single = dir == null ? null : new File(dir, Config.WALLPAPER_NAME);
         if (single != null && single.isFile()) images.add(0, single);
 
-        for (File img : images) {
+        if (images.size() > 1) {
+            File cover = images.get(0);
+            for (File img : images) {
+                if (img.getName().contains("nile")) {
+                    cover = img;
+                    break;
+                }
+            }
+            items.add(new WallpaperPickerAdapter.Item(
+                    OnlineWallpaper.CHOICE_LOCAL_PACK,
+                    getString(R.string.wp_nasa_title),
+                    getString(R.string.wp_nasa_sub, images.size()),
+                    cover.getAbsolutePath()
+            ));
+        } else if (images.size() == 1) {
+            File img = images.get(0);
             items.add(new WallpaperPickerAdapter.Item(
                     img.getName(),
                     img.getName().replace(".jpg", "").replace(".png", "").replace(".webp", ""),
@@ -323,7 +338,8 @@ public final class LauncherSettingsActivity extends Activity {
                 ""
         ));
 
-        String currentChoice = choices.getString(Config.WALLPAPER_CHOICE_KEY, OnlineWallpaper.CHOICE_HOGWARTS);
+        String currentChoice = choices.getString(Config.WALLPAPER_CHOICE_KEY, OnlineWallpaper.CHOICE_LOCAL_PACK);
+        if (currentChoice == null) currentChoice = OnlineWallpaper.CHOICE_LOCAL_PACK;
 
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setView(dialogView)
@@ -473,12 +489,14 @@ public final class LauncherSettingsActivity extends Activity {
         String wpText;
         if ("none".equals(wallpaperCurrent)) {
             wpText = getString(R.string.wallpaper_none);
+        } else if (OnlineWallpaper.CHOICE_LOCAL_PACK.equals(wallpaperCurrent) || wallpaperCurrent == null) {
+            wpText = getString(R.string.wp_nasa_title);
         } else if (OnlineWallpaper.isOnlineChoice(wallpaperCurrent)) {
             wpText = OnlineWallpaper.labelFor(this, wallpaperCurrent);
         } else if (wallpaperCurrent != null) {
             wpText = wallpaperCurrent;
         } else {
-            wpText = getString(R.string.wallpaper_theme_default);
+            wpText = getString(R.string.wp_nasa_title);
         }
         wallpaperChoice.setText(getString(R.string.wallpaper_state, wpText));
         if (openOnStartChoice != null) {

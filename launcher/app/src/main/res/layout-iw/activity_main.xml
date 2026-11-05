@@ -278,8 +278,12 @@
                             android:shadowDy="1.5"
                             android:shadowRadius="4"
                             android:textSize="13sp"
+                            android:autoSizeTextType="uniform"
+                            android:autoSizeMinTextSize="10sp"
+                            android:autoSizeMaxTextSize="13sp"
+                            android:autoSizeStepGranularity="0.5sp"
                             android:fontFamily="@string/font_regular"
-                            android:letterSpacing="0.04"
+                            android:letterSpacing="0.02"
                             android:textAllCaps="true" />
 
                         <!-- Lunar date ("Lunar 13/9 · Year of the Horse"), shown when lunar_date is on. -->

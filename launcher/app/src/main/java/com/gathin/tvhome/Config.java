@@ -731,10 +731,17 @@ final class Config {
         if (wallpapers.isEmpty() && wallpaper != null) wallpapers.add(wallpaper);
         // An on-TV wallpaper pick overrides the theme: a filename from the wallpapers/
         // collection, or "none". Unset means the theme decides (off by default).
-        String wallpaperChoice = choices != null ? choices.getString(WALLPAPER_CHOICE_KEY, OnlineWallpaper.CHOICE_HOGWARTS) : OnlineWallpaper.CHOICE_HOGWARTS;
+        String wallpaperChoice = choices != null ? choices.getString(WALLPAPER_CHOICE_KEY, null) : null;
         List<File> chosen = WallpaperRotation.chosen(dir == null ? Collections.emptyList()
                 : WallpaperRotation.images(new File(dir, "wallpapers")), wallpaper, wallpaperChoice);
-        if (OnlineWallpaper.isOnlineChoice(wallpaperChoice)) {
+        if (OnlineWallpaper.CHOICE_LOCAL_PACK.equals(wallpaperChoice)) {
+            wallpaperEnabled = true;
+            if (rotationMinutes <= 0) rotationMinutes = 15;
+            if (dir != null && wallpapers.isEmpty()) {
+                wallpapers.addAll(WallpaperRotation.images(new File(dir, "wallpapers")));
+            }
+            if (!wallpapers.isEmpty()) wallpaper = wallpapers.get(0);
+        } else if (OnlineWallpaper.isOnlineChoice(wallpaperChoice)) {
             wallpapers.clear();
             wallpaper = OnlineWallpaper.getCacheFile(ctx);
             wallpaperEnabled = true;
@@ -812,12 +819,12 @@ final class Config {
             SharedPreferences.Editor editor = choices.edit();
             if (!"absent".equals(token)) editor.remove("columns").remove("animations")
                     .remove("advanced_effects").remove(ROWS_BELOW_DOCK_KEY).remove(WALLPAPER_CHOICE_KEY)
-                    .remove(AMBIENT_GLOW_KEY).remove(DOCK_OPACITY_KEY).remove(CLOCK_FORMAT_KEY).remove("wallpaper_rotation_minutes");
+                    .remove(AMBIENT_GLOW_KEY).remove(DOCK_OPACITY_KEY).remove(CLOCK_FORMAT_KEY);
             editor.putString(THEME_SIGNATURE_KEY, signature).commit();
         } else if (!seen.equals(signature)) {
             choices.edit().remove("columns").remove("animations").remove("advanced_effects")
                     .remove(ROWS_BELOW_DOCK_KEY).remove(WALLPAPER_CHOICE_KEY).remove(AMBIENT_GLOW_KEY).remove(DOCK_OPACITY_KEY)
-                    .remove(CLOCK_FORMAT_KEY).remove("wallpaper_rotation_minutes").putString(THEME_SIGNATURE_KEY, signature).commit();
+                    .remove(CLOCK_FORMAT_KEY).putString(THEME_SIGNATURE_KEY, signature).commit();
         }
     }
 
