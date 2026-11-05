@@ -323,7 +323,7 @@ public final class LauncherSettingsActivity extends Activity {
                 ""
         ));
 
-        String currentChoice = choices.getString(Config.WALLPAPER_CHOICE_KEY, OnlineWallpaper.CHOICE_BING);
+        String currentChoice = choices.getString(Config.WALLPAPER_CHOICE_KEY, OnlineWallpaper.CHOICE_HOGWARTS);
 
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setView(dialogView)

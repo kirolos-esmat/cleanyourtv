@@ -731,7 +731,7 @@ final class Config {
         if (wallpapers.isEmpty() && wallpaper != null) wallpapers.add(wallpaper);
         // An on-TV wallpaper pick overrides the theme: a filename from the wallpapers/
         // collection, or "none". Unset means the theme decides (off by default).
-        String wallpaperChoice = choices != null ? choices.getString(WALLPAPER_CHOICE_KEY, null) : null;
+        String wallpaperChoice = choices != null ? choices.getString(WALLPAPER_CHOICE_KEY, OnlineWallpaper.CHOICE_HOGWARTS) : OnlineWallpaper.CHOICE_HOGWARTS;
         List<File> chosen = WallpaperRotation.chosen(dir == null ? Collections.emptyList()
                 : WallpaperRotation.images(new File(dir, "wallpapers")), wallpaper, wallpaperChoice);
         if (OnlineWallpaper.isOnlineChoice(wallpaperChoice)) {
@@ -812,12 +812,12 @@ final class Config {
             SharedPreferences.Editor editor = choices.edit();
             if (!"absent".equals(token)) editor.remove("columns").remove("animations")
                     .remove("advanced_effects").remove(ROWS_BELOW_DOCK_KEY).remove(WALLPAPER_CHOICE_KEY)
-                    .remove(AMBIENT_GLOW_KEY).remove(DOCK_OPACITY_KEY).remove(CLOCK_FORMAT_KEY);
+                    .remove(AMBIENT_GLOW_KEY).remove(DOCK_OPACITY_KEY).remove(CLOCK_FORMAT_KEY).remove("wallpaper_rotation_minutes");
             editor.putString(THEME_SIGNATURE_KEY, signature).commit();
         } else if (!seen.equals(signature)) {
             choices.edit().remove("columns").remove("animations").remove("advanced_effects")
                     .remove(ROWS_BELOW_DOCK_KEY).remove(WALLPAPER_CHOICE_KEY).remove(AMBIENT_GLOW_KEY).remove(DOCK_OPACITY_KEY)
-                    .remove(CLOCK_FORMAT_KEY).putString(THEME_SIGNATURE_KEY, signature).commit();
+                    .remove(CLOCK_FORMAT_KEY).remove("wallpaper_rotation_minutes").putString(THEME_SIGNATURE_KEY, signature).commit();
         }
     }
 

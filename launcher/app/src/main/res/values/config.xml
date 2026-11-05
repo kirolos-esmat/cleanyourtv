@@ -505,7 +505,7 @@
 
     <!-- Festive skin for holidays: halloween, diwali, dussehra. Leave empty for none. -->
     <string name="seasonal_skin" translatable="false">halloween</string>
-    <string name="festival_until" translatable="false">2026-11-02</string>
+    <string name="festival_until" translatable="false">2026-11-30</string>
     <string name="accent_color" translatable="false">#FF7A1A</string>
 
     <!-- Each team's next game in the F1 panel's place under the clock, rotating with the theme's F1 weekend: the package
