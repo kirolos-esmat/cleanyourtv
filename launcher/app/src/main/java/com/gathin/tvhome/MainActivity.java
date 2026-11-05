@@ -108,6 +108,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     static final String ACTION_LAUNCHER_SETTINGS = "com.gathin.tvhome.action.LAUNCHER_SETTINGS";
     /** Action to trigger an immediate wallpaper shuffle. */
     static final String ACTION_SHUFFLE_WALLPAPER = "com.gathin.tvhome.action.SHUFFLE_WALLPAPER";
+    /** Action to trigger a clean recreation/reload of Home. */
+    static final String ACTION_RELOAD = "com.gathin.tvhome.action.RELOAD";
     /** Sent by the "library" action word of app_keys: open the App library over Home (needs app_library). */
     static final String ACTION_APP_LIBRARY = "com.gathin.tvhome.action.APP_LIBRARY";
     /** The system input switcher, forwarded here by InputsRequestActivity while handle_view_inputs is on. */
@@ -1128,6 +1130,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        if (intent != null && ACTION_RELOAD.equals(intent.getAction())) {
+            recreate();
+            return;
+        }
         if (openLauncherSettingsIfAsked(intent)) return;
         if (openLibraryIfAsked(intent)) return;
         if (openInputsIfAsked(intent)) return;
