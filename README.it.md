@@ -4,7 +4,7 @@
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">正體中文</a> · <a href="README.vi.md">Tiếng Việt</a> · <a href="README.ja.md">日本語</a> · Italiano · <a href="README.nl.md">Nederlands</a> · <a href="README.de.md">Deutsch</a> · <a href="README.uk.md">Українська</a> · <a href="README.tr.md">Türkçe</a>
+  <a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">正體中文</a> · <a href="README.vi.md">Tiếng Việt</a> · <a href="README.ja.md">日本語</a> · Italiano · <a href="README.pt-BR.md">Português</a> · <a href="README.nl.md">Nederlands</a> · <a href="README.de.md">Deutsch</a> · <a href="README.uk.md">Українська</a> · <a href="README.tr.md">Türkçe</a>
 </p>
 
 <p align="center">
@@ -36,7 +36,7 @@ tracciamento, passo per passo con il telecomando: [cleanyour.tv/not-android](htt
 |---|---|
 | **Una Android TV o una Google TV** | [Avvio rapido](#avvio-rapido): un assistente di programmazione fa il lavoro in una quindicina di minuti. |
 | **Una TV Samsung, LG, Roku, Vizio o Hisense VIDAA** | [cleanyour.tv/not-android](https://cleanyour.tv/not-android): CleanYourTV lì non funziona, ma puoi disattivare il tracciamento con il telecomando. |
-| **Solo un telefono Android** | L'[app Clean Your TV](https://cleanyour.tv/app) creata dalla community: niente portatile, niente assistente di programmazione. |
+| **Telefono o portatile, senza assistente** | Una delle [app della community](https://cleanyour.tv/app) per telefoni Android, Mac e Windows, create da sviluppatori indipendenti. |
 | **Vuoi prima vedere com'è** | [Cosa offre il launcher](#cosa-offre-il-launcher): schermate della nuova Home. |
 
 **Link ufficiali:** [cleanyour.tv](https://cleanyour.tv) e questo repository. Altri domini che usano il nome, come
@@ -59,9 +59,9 @@ di programmazione a controllare prima la TV reale, poi a chiederti quali app e f
 
 ## Avvio rapido
 
-Senza computer c'è l'[app Clean Your TV](https://cleanyour.tv/app) per Android, creata dalla community: collega la
-TV, mostra prima un piano, salva un punto di ripristino e si limita a disattivare le app. Senza assistente di
-programmazione, ma con un computer, puoi fare gli stessi passi a mano: vedi [Fai da te](#fai-da-te).
+Senza computer o senza assistente di programmazione ci sono le [app della community](https://cleanyour.tv/app) per
+telefoni Android, Mac e Windows, create da sviluppatori indipendenti: mostrano prima un piano e si limitano a disattivare
+le app. Con un computer puoi anche fare gli stessi passi a mano: vedi [Fai da te](#fai-da-te).
 
 Con l'assistente ti servono un computer sulla stessa rete della TV e un assistente di programmazione che sappia eseguire comandi da
 terminale, per esempio [Claude Code](https://claude.com/product/claude-code), [Codex](https://github.com/openai/codex)
@@ -120,6 +120,10 @@ Tieni premuto OK sul pulsante Impostazioni e scegli il riordino nel menu. Premi 
 usa le frecce per cambiarne la posizione, poi OK o Indietro per posarla; quando non hai nessuna app in mano, premi
 Indietro per uscire e salvare. Il pulsante di riordino nella barra in alto è nascosto di serie: si attiva con
 `reorder_button` nella configurazione o in un tema.
+
+Anche tenendo premuto OK su un'app della Home compare il menu dei riquadri (`tile_menu`, attivo di serie): Sposta
+solleva subito quell'app, poi c'è Info app e, con la libreria app attiva, anche Rimuovi dalla Home. Se lo disattivi, tenere premuto OK apre le
+informazioni dell'app.
 
 La libreria app è disattivata di serie. Con `app_library` attivo nella configurazione o in un tema, l'accesso compare
 dopo l'ultima riga di app della Home. La libreria elenca sia le app per TV sia le normali app Android; queste ultime
@@ -329,7 +333,7 @@ pacchetti di sistema con `RECORD_AUDIO` che non registrano nulla, e i client ACR
 permesso audio. [`tools/privacy.py`](tools/privacy.py) riporta ciò che la TV dichiara davvero, con le prove per ogni
 candidato di voce, ACR e telemetria: `TV_HOST=192.168.1.50 tools/venv/bin/python -I tools/privacy.py`; con `--write`
 li trasforma in un normale elenco di app da disattivare. Non può però provare le intenzioni:
-[docs/privacy.md](docs/privacy.md) (in inglese) spiega perché.
+[docs/it/privacy.md](docs/it/privacy.md) ([versione inglese](docs/privacy.md)) spiega perché.
 
 ## Ripristinare il launcher e le app originali
 
@@ -364,7 +368,7 @@ TV_HOST=192.168.1.50 tools/restore.sh "examples/il-tuo-modello/debloat.txt" com.
 - Se l'ADB non si collega, puoi comunque riattivare le app dalle impostazioni della TV.
 
 Per i dettagli (cosa contiene il record, quando conta l'argomento del launcher originale, cosa succede senza record)
-vedi [docs/restore.md](docs/restore.md), in inglese.
+vedi [docs/it/restore.md](docs/it/restore.md) ([versione inglese](docs/restore.md)).
 
 ## Dopo un aggiornamento del firmware
 
@@ -377,7 +381,7 @@ TV_HOST=192.168.1.50 tools/venv/bin/python -I tools/check.py examples/il-tuo-mod
 ```
 
 I codici di uscita, un controllo settimanale e i casi particolari sono in
-[docs/firmware-updates.md](docs/firmware-updates.md) (in inglese).
+[docs/it/firmware-updates.md](docs/it/firmware-updates.md) ([versione inglese](docs/firmware-updates.md)).
 
 ## Risoluzione dei problemi
 
@@ -398,9 +402,20 @@ La guida completa (in inglese) è in [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHO
 
 **Non programmo e non ho un portatile: posso farlo lo stesso?**
 
-Sì. L'[app per telefono Android](https://cleanyour.tv/app), gratuita, open source e creata dalla community, fa la stessa
-pulizia via Wi-Fi: si collega alla TV, mostra prima un piano, salva un punto di ripristino e si limita a disattivare
-le app, quindi tutto si può rimettere a posto.
+Sì. Sviluppatori indipendenti hanno creato app gratuite e open source basate sulle liste di CleanYourTV, che fanno la
+stessa pulizia via Wi-Fi senza assistente di programmazione. Ognuna mostra prima un piano, si limita a disattivare le app
+e può rimettere tutto a posto:
+
+| App | Per | Di |
+|---|---|---|
+| [Clean Your TV app](https://github.com/udhaykumarbala/cleanyourtv-app) | Telefono Android | [@udhaykumarbala](https://github.com/udhaykumarbala) |
+| [Tellyscope](https://github.com/man15h/tellyscope) | Telefono Android | [@man15h](https://github.com/man15h) |
+| [TidyTV](https://github.com/jolan94/tidytv) | Telefono Android, Google Play | [@jolan94](https://github.com/jolan94) |
+| [CleanMyTV](https://github.com/wingedpanther/cleanmytv) | Mac e Windows | [@wingedpanther](https://github.com/wingedpanther) |
+
+Queste app sono progetti indipendenti, non affiliati a CleanYourTV o al suo maintainer né approvati da loro, e ognuna è
+fornita così com'è con la propria licenza. Segnala i problemi di un'app nel suo repository. Altro su
+[cleanyour.tv/app](https://cleanyour.tv/app).
 
 **Reinstalla il firmware o rimuove le app di sistema?**
 
@@ -423,7 +438,7 @@ Sì. La connessione ADB via TCP (di serie porta 5555) usata dagli strumenti non 
 chiedono nemmeno l'autorizzazione. Finito il lavoro, spegni il debug USB, il debug di rete / ADB e il debug wireless
 (quelli che ha la tua TV), revoca le autorizzazioni date, riavvia la TV e verifica dal computer che la porta sia
 chiusa: `python3 tools/adb-closed.py <ip della TV>` deve dire che la porta è chiusa. Il launcher funziona anche senza
-debug. Altri dettagli nelle [domande frequenti in inglese](docs/faq.md#isnt-adb-access-a-security-hole).
+debug. Altri dettagli nelle [domande frequenti](docs/it/faq.md#laccesso-adb-non-è-un-buco-di-sicurezza) ([versione inglese](docs/faq.md#isnt-adb-access-a-security-hole)).
 
 **Supporta DNS privato o AirPlay?**
 
